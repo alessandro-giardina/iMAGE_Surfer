@@ -17,6 +17,8 @@ sources:
 
 iMAGE Surfer è un'applicazione **nativa macOS** che tratta una cartella del filesystem come un insieme di immagini da lavorare, non come un elenco di file: visualizzazione a griglia con anteprime grandi, navigazione integralmente da tastiera, metadati sempre visibili, rilevamento di duplicati esatti e quasi-duplicati, rinomina e smistamento massivi guidati da regole, e selezione assistita da analisi visiva eseguita interamente in locale.
 
+Il principio portante è che **la cartella è la fonte di verità**, e il PRD 1.1 lo estende al lavoro dell'utente: i giudizi (stelle e marcature) non vivono in una cache ma in sidecar XMP affiancati alle immagini, leggibili anche fuori dall'app, mentre l'indice locale resta cache dei soli dati ricalcolabili.
+
 Questo scopo è **intento di prodotto documentato**, non comportamento osservato: al momento della compilazione di questa mappa il repository non contiene codice applicativo. La fonte dell'intento è il PRD, rappresentato come concetto di riferimento: [PRD di iMAGE Surfer](/references/prd.md).
 
 <!-- archetipo:wiki section=actors -->
@@ -42,8 +44,9 @@ Lo stack è **prescritto dal PRD e non ancora presente nel repository**. Nessun 
 | Interfaccia | SwiftUI con ponte AppKit (`NSCollectionView`) per la griglia | assente |
 | Anteprime e immagini | QuickLook Thumbnailing, ImageIO, Core Image | assente |
 | Visione artificiale | Vision, Core ML | assente |
-| Persistenza | SQLite tramite GRDB.swift 7.x | assente |
-| Test | Swift Testing, XCUITest | assente |
+| Osservazione filesystem | File System Events, con eventi a granularità di file e identificatore d'evento persistito | assente |
+| Persistenza | SQLite tramite GRDB.swift 7.x per la cache; sidecar XMP (schema Basic) per i giudizi | assente |
+| Test | Swift Testing, XCUITest, test di lunga durata su memoria ed eventi | assente |
 
 <!-- archetipo:wiki section=scope -->
 
