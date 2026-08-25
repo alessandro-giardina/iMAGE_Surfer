@@ -60,3 +60,45 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# --- iMAGE Surfer specific ---
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# Xcode build output
+build/
+DerivedData/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+
+# Swift Package Manager, local packages
+.swiftpm/
+Packages/*/.build/
+
+# Signing and notarization secrets
+*.p12
+*.mobileprovision
+*.provisionprofile
+notarization-credentials*
+ExportOptions.local.plist
+
+# Distribution artifacts
+dist/
+*.dmg
+
+# Core ML model conversion scratch (converted models are committed under App/Resources)
+Scripts/coreml-conversion/.venv/
+Scripts/coreml-conversion/__pycache__/
+
+# ARchetipo local state that must not be shared
+.archetipo/config.yaml.backup-*
+.archetipo/worktrees/
