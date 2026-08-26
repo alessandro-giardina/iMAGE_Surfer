@@ -102,3 +102,6 @@ Scripts/coreml-conversion/__pycache__/
 # ARchetipo local state that must not be shared
 .archetipo/config.yaml.backup-*
 .archetipo/worktrees/
+
+# Claude Code personal overrides (shared settings live in .claude/settings.json)
+.claude/settings.local.json

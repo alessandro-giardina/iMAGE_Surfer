@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(archetipo wiki *)",
+      "Bash(git merge *)",
+      "Bash(git branch *)"
+    ]
+  }
+}
