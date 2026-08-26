@@ -1,0 +1,41 @@
+schema: archetipo/spec/v2
+code: US-002
+title: Cancello 2 - stabilire quali primitive di identità ed eventi reggono per classe di volume
+epic:
+  code: EP-001
+priority: HIGH
+points: 5
+status: TODO
+scope: MVP
+body: |-
+  Come Leonardo, architetto di iMAGE Surfer,
+  voglio provare le primitive di identità del sistema e il comportamento degli eventi su APFS locale, volume esterno, cartella sincronizzata e volume di rete, incluso cosa accade a smontaggio, rimontaggio e cronologia degli eventi non più disponibile,
+  così che ADR-011, ADR-012 e la matrice dei casi di FR-054 siano confermati oppure emendati con esiti misurati, e che ogni classe di volume il cui supporto va dichiarato **limitato** sia nominata prima di costruire il catalogo.
+
+  ## Dimostra
+
+  Partendo da un Mac su cui i quattro tipi di volume di prova non sono ancora predisposti, il revisore segue la procedura versionata sotto `Spikes/02-fsevents-identity/`, li configura, ed esegue il banco. Osserva sul terminale l'esito prova per prova. Apre poi `Spikes/02-fsevents-identity/RESULT.md` e osserva la tabella primitiva per classe di volume con le celle valorizzate dalle prove appena eseguite, il resoconto del ciclo smontaggio-rimontaggio, il meccanismo di aggiornamento scelto per ciascuna classe, e la matrice di FR-054 ripubblicata riga per riga con il livello confermato o spostato. Verifica infine che nel repository sia versionata la procedura di configurazione e non il contenuto dei volumi.
+
+  ## Criteri di accettazione
+
+  - [ ] AC-1 - Esiste `Spikes/02-fsevents-identity/` con la procedura di configurazione dei quattro tipi di volume di prova - APFS locale, volume esterno, cartella gestita da un servizio di sincronizzazione, volume di rete - eseguibile da un altro sviluppatore; il documento dichiara quale servizio di sincronizzazione e quale protocollo di rete sono stati usati, e i volumi non sono versionati.
+  - [ ] AC-2 - `Spikes/02-fsevents-identity/RESULT.md` pubblica una tabella con una riga per primitiva provata - identificatore di risorsa, identificatore di documento, identificatore di volume, bookmark persistente - e una colonna per classe di volume, dove ogni cella riporta se l'identità sopravvive a rinomina, spostamento nello stesso volume, spostamento tra volumi, smontaggio e rimontaggio, con numero di prove eseguite e riuscite.
+  - [ ] AC-3 - `RESULT.md` riporta, per ogni classe di volume, cosa riceve l'osservatore a smontaggio e a rimontaggio, se l'identificatore d'evento persistito e legato all'identità del volume resta applicabile, e cosa si osserva quando la cronologia degli eventi non è più disponibile.
+  - [ ] AC-4 - `RESULT.md` nomina per ogni classe di volume il meccanismo di aggiornamento adottato - notifiche, riconciliazione periodica, aggiornamento manuale - con la misura che lo giustifica, ed elenca le classi il cui supporto va dichiarato all'utente come **limitato**.
+  - [ ] AC-5 - `RESULT.md` riporta il comportamento misurato dei file non ancora materializzati su volume di rete e cartella sincronizzata: se le sole operazioni di enumerazione e lettura dei metadati provocano un trasferimento, e come il file non materializzato è distinguibile senza scaricarlo.
+  - [ ] AC-6 - `RESULT.md` chiude con l'esito su ADR-011 e ADR-012 - ciascuno **confermato** o **emendato** con il testo di sostituzione - e ripubblica la matrice dei casi di FR-054 con ogni riga confermata al proprio livello, spostata a un livello diverso, oppure aggiunta perché emersa dalla misura.
+  - [ ] AC-7 - Una primitiva o una classe di volume che non regge è registrata come **non supportata**, o supportata in modo dichiaratamente limitato, con la prova che lo dimostra; il cancello non sostituisce una primitiva non misurata a una che ha fallito per poter chiudere con una conferma.
+
+  ## Fuori ambito
+
+  Nessuna implementazione dell'osservatore e del riconciliatore destinati al pacchetto `Catalog/`, e nessuna interfaccia per gli stati di freschezza della vista: il banco misura le primitive e gli eventi, non costruisce il componente. Il cancello non pubblica la matrice di FR-054 dentro l'applicazione - quello è requisito di prodotto della tappa che costruisce la durabilità dei giudizi - e non tocca il sidecar né gli altri tre cancelli.
+
+  ## Contesto Wiki
+
+  - `overview` - identità dei file da chiavi di risorsa più bookmark, combinazione da stabilire in Tappa 0; altre applicazioni e sistema operativo come attori non controllati
+  - `operations/development` - mandato del cancello 2 di concludere che una classe richiede un meccanismo diverso; materiale non versionabile
+  - `architecture/context-map` - area prevista "Catalogo cartella", oggi senza alcuna evidenza
+  - `references/prd` - ADR-011, ADR-012, ADR-015, FR-006 a FR-018, FR-054, FR-055, FR-091, NFR-A9, NFR-I6, NFR-I10
+history:
+  - status: TODO
+    at: "2026-08-26T13:23:00Z"

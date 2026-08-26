@@ -1,0 +1,41 @@
+schema: archetipo/spec/v2
+code: US-003
+title: Cancello 3 - verificare il round-trip XMP su strumenti reali e uno scrittore non coordinato
+epic:
+  code: EP-001
+priority: HIGH
+points: 5
+status: TODO
+scope: MVP
+body: |-
+  Come Leonardo, architetto di iMAGE Surfer,
+  voglio provare il ciclo scrittura-lettura del sidecar XMP con Bridge, Lightroom, darktable e digiKam, e includere deliberatamente uno scrittore che ignora NSFileCoordinator,
+  così che ADR-013 sia confermato oppure emendato, e che convenzione di nome, rappresentazione dello scarto e capacità effettiva della verifica dopo la scrittura smettano di essere candidati e diventino decisioni misurate.
+
+  ## Dimostra
+
+  Partendo dalle immagini e dai sidecar di terze parti versionati sotto `Spikes/03-xmp-roundtrip/`, il revisore esegue il banco e osserva sul terminale il verdetto campo per campo per ciascuno dei quattro strumenti. Lancia poi lo scrittore non coordinato incluso nella cartella del cancello, contemporaneamente a una scrittura del banco, e osserva se la verifica successiva alla sostituzione segnala l'interferenza e quale valore precedente viene recuperato. Apre `Spikes/03-xmp-roundtrip/RESULT.md` e osserva la convenzione di nome scelta, la rappresentazione di "da scartare" scelta, e la riga di esito su ADR-013.
+
+  ## Criteri di accettazione
+
+  - [ ] AC-1 - Esiste `Spikes/03-xmp-roundtrip/` con le fixture versionate del cancello - immagini di prova e sidecar prodotti da ciascuno dei quattro strumenti - e con uno **scrittore non coordinato**: un programma di prova che sostituisce il sidecar ignorando deliberatamente NSFileCoordinator, eseguibile a richiesta e in concorrenza con il banco.
+  - [ ] AC-2 - `Spikes/03-xmp-roundtrip/RESULT.md` riporta, per ciascuno dei quattro strumenti e con la sua versione dichiarata, l'esito misurato del ciclo in entrambe le direzioni: quali campi scritti dall'app lo strumento legge, quali campi scritti dallo strumento l'app legge, e quali campi lo strumento ignora, riscrive o elimina.
+  - [ ] AC-3 - `RESULT.md` decide la convenzione di nome tra `foto.xmp` e `foto.jpg.xmp` riportando quale convenzione ciascuno strumento legge e quale scrive, e dichiara il comportamento osservato quando due immagini di formato diverso condividono la stessa radice del nome.
+  - [ ] AC-4 - `RESULT.md` decide la rappresentazione di "da scartare" tra un rating negativo e un'etichetta, riportando per ciascuno dei quattro strumenti come il valore scritto viene interpretato e come viene restituito in lettura.
+  - [ ] AC-5 - `RESULT.md` riporta l'esito della prova con lo scrittore non coordinato: su quante ripetizioni la verifica successiva alla sostituzione **rileva** l'interferenza, su quante non la rileva, e in quali casi la versione precedente conservata temporaneamente è stata recuperata integralmente.
+  - [ ] AC-6 - `RESULT.md` riporta il comportamento misurato su un sidecar contenente campi sconosciuti all'app e su un sidecar malformato: nel primo caso se i campi sopravvivono invariati alla riscrittura, nel secondo se il file viene segnalato e lasciato intatto.
+  - [ ] AC-7 - `RESULT.md` chiude con l'esito su ADR-013, **confermato** oppure **emendato** con il testo di sostituzione. Se una decisione non è chiudibile - nessuna convenzione di nome compatibile con tutti e quattro gli strumenti, oppure interferenza non coordinata non rilevabile in modo affidabile - l'esito è registrato come **non supportabile nella forma promessa**, con il contratto ridotto da dichiarare all'utente al posto di quello attuale.
+
+  ## Fuori ambito
+
+  Nessuna implementazione del pacchetto `Sidecar/` destinato al prodotto, nessuno stato di sincronizzazione visibile in interfaccia, nessun comando di recupero rivolto all'utente: il cancello stabilisce cosa è sostenibile, non lo consegna. Restano fuori la scrittura di IPTC dentro i file immagine e le parole chiave, dichiarate funzioni di crescita, e gli altri tre cancelli con i loro ADR.
+
+  ## Contesto Wiki
+
+  - `overview` - i giudizi vivono in sidecar XMP affiancati; NSFileCoordinator è cooperativo e non impositivo; altre applicazioni sugli stessi file come attore non controllato
+  - `operations/development` - mandato del cancello 3, che include uno scrittore che ignora il coordinamento di sistema
+  - `architecture/context-map` - area prevista "Sidecar", oggi senza alcuna evidenza; regola dichiarata di non descrivere mai un meccanismo cooperativo come impositivo
+  - `references/prd` - ADR-013, ADR-015, FR-046 a FR-052, FR-056, NFR-A5, NFR-A6, NFR-A8, NFR-I7, NFR-I9
+history:
+  - status: TODO
+    at: "2026-08-26T13:23:00Z"

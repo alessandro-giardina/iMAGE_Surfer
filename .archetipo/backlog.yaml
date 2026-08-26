@@ -1,0 +1,10 @@
+schema: archetipo/backlog/v2
+version: 2
+epics:
+  - code: EP-001
+    title: Tappa 0 - Cancelli tecnici
+order:
+  - US-001
+  - US-002
+  - US-003
+  - US-004

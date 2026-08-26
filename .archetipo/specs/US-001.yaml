@@ -1,0 +1,42 @@
+schema: archetipo/spec/v2
+code: US-001
+title: Cancello 1 - misurare scala e memoria su 50.000 file e chiudere ADR-009
+epic:
+  code: EP-001
+  title: Tappa 0 - Cancelli tecnici
+priority: HIGH
+points: 5
+status: TODO
+scope: MVP
+body: |-
+  Come Leonardo, architetto di iMAGE Surfer,
+  voglio misurare su hardware dichiarato il comportamento in latenza e in memoria di una cartella da 50.000 immagini, e derivarne le stime di costo e l'ampiezza della banda di ritenzione,
+  così che ADR-009 - e con esso NFR-P1, NFR-P9 e NFR-P10 - sia confermato oppure emendato con numeri misurati, prima che venga scritta una riga del pacchetto che ne dipende.
+
+  ## Dimostra
+
+  Partendo da un repository che non contiene ancora codice applicativo, il revisore esegue la procedura versionata sotto `Spikes/01-scale-memory/` e ottiene il dataset da 50.000 file e il banco di misura. Esegue il banco e osserva sul terminale le misure grezze; apre poi `Spikes/01-scale-memory/RESULT.md` e osserva le stesse cifre riportate insieme alla tabella delle stime di costo, all'ampiezza dichiarata della banda di ritenzione, e alla riga di esito che nomina ADR-009 come **confermato** oppure **emendato** con il testo di sostituzione. Il revisore verifica infine che il dataset da 50.000 file **non** sia tracciato da Git, mentre la procedura che lo genera lo sia.
+
+  ## Criteri di accettazione
+
+  - [ ] AC-1 - Esiste `Spikes/01-scale-memory/` con una procedura di generazione del dataset eseguibile da un altro sviluppatore, che produce l'insieme da 50.000 file segmentato per formato e classe di risoluzione; la procedura e la configurazione sono versionate, i file generati non lo sono.
+  - [ ] AC-2 - `Spikes/01-scale-memory/RESULT.md` dichiara l'hardware di misura usato - modello, memoria, tipo di disco - e ogni cifra riportata nel documento è attribuita a quella configurazione.
+  - [ ] AC-3 - `RESULT.md` riporta il tempo misurato alla prima schermata di anteprime su 3.000 immagini, la latenza misurata dello spostamento della selezione mentre il lavoro in sottofondo è attivo, l'occupazione di memoria di picco su 50.000 immagini con scorrimento continuo, e l'andamento dell'occupazione in una sessione di lunga durata, ciascuna con numero di ripetizioni e dispersione.
+  - [ ] AC-4 - `RESULT.md` pubblica una tabella di stime di costo in memoria segmentata per tipo di lavoro, formato e classe di risoluzione, e per ogni riga il margine di sicurezza applicato e il limite per singolo elemento; ogni stima è ricondotta alla misura che la calibra.
+  - [ ] AC-5 - `RESULT.md` dichiara l'ampiezza della banda di ritenzione con le sue soglie distinte di entrata e di uscita, e la motiva con il costo di ricalcolo misurato provocato da un piccolo movimento di scorrimento.
+  - [ ] AC-6 - `RESULT.md` chiude con l'esito su ADR-009, NFR-P1, NFR-P9 e NFR-P10: ciascuno risulta **confermato**, oppure **emendato** con il testo di sostituzione e i valori numerici misurati al posto delle soglie dichiarate.
+  - [ ] AC-7 - Una soglia non raggiungibile sull'hardware dichiarato è registrata in `RESULT.md` come **non supportabile**, con la misura che lo dimostra e la modifica proposta al requisito; l'esito è valido e chiude il cancello, senza che la misura venga ripetuta su una configurazione diversa per ottenere una conferma.
+
+  ## Fuori ambito
+
+  Nessuna implementazione del pacchetto `Work/` destinato al prodotto: code, politica di ammissione, cache di anteprime e banda di ritenzione vanno misurate con il materiale del banco, non costruite nella forma definitiva. Il cancello non produce interfaccia utente, non introduce la pipeline di integrazione continua che eseguirà i test di lunga durata, e non tocca gli altri tre cancelli né gli ADR che verificano.
+
+  ## Contesto Wiki
+
+  - `overview` - stack prescritto e non ancora presente; il repository non contiene codice applicativo
+  - `operations/development` - materiale dei cancelli 1 e 2 non versionabile, soglie dichiarate e non misure ottenute
+  - `architecture/context-map` - area prevista "Ammissione del lavoro", oggi senza alcuna evidenza
+  - `references/prd` - ADR-009, ADR-015, NFR-P1, NFR-P6, NFR-P9, NFR-P10, NFR-P12
+history:
+  - status: TODO
+    at: "2026-08-26T13:23:00Z"

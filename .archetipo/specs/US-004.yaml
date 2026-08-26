@@ -1,0 +1,41 @@
+schema: archetipo/spec/v2
+code: US-004
+title: Cancello 4 - stabilire per iniezione di arresti quale dei cinque esiti si raggiunge
+epic:
+  code: EP-001
+priority: HIGH
+points: 5
+status: TODO
+scope: MVP
+body: |-
+  Come Leonardo, architetto di iMAGE Surfer,
+  voglio interrompere un lotto di operazioni su file in ogni punto enumerato e osservare, dopo il recupero, quale dei cinque esiti dichiarati viene effettivamente raggiunto e se la compensazione riporta lo stato precedente,
+  così che ADR-007 sia confermato oppure emendato, e che i punti di interruzione destinati legittimamente a "bloccato in attesa dell'utente" siano nominati prima di costruire la macchina a stati che li deve gestire.
+
+  ## Dimostra
+
+  Partendo dalle fixture versionate sotto `Spikes/04-crash-recovery/` - una cartella di immagini con i loro sidecar e un lotto di prova con log di intenti e passi idempotenti - il revisore esegue il banco chiedendo l'interruzione a un punto scelto dall'elenco enumerato, e osserva il processo terminare in quel punto. Riavvia il banco, osserva la procedura di recupero, e legge sul terminale quale dei cinque esiti è stato raggiunto e lo stato in cui si trovano immagini e sidecar. Ripete su tutti i punti dell'elenco, poi apre `Spikes/04-crash-recovery/RESULT.md` e osserva la tabella con una riga per punto di interruzione, i punti dichiarati legittimamente "bloccato", e la riga di esito su ADR-007.
+
+  ## Criteri di accettazione
+
+  - [ ] AC-1 - Esiste `Spikes/04-crash-recovery/` con un lotto di prova eseguibile che scrive il log di intenti prima di agire, esegue passi idempotenti registrati uno a uno, e un meccanismo che interrompe il processo a un punto scelto dall'elenco enumerato dei punti di interruzione; le fixture del lotto sono versionate.
+  - [ ] AC-2 - `Spikes/04-crash-recovery/RESULT.md` pubblica una tabella con una riga per ogni punto di interruzione enumerato, e per ciascuno l'esito raggiunto tra i cinque dichiarati - completato, compensato, parzialmente recuperato, bloccato in attesa dell'utente, abbandonato dall'utente - il numero di ripetizioni e lo stato osservato di immagine e sidecar dopo il recupero.
+  - [ ] AC-3 - `RESULT.md` dichiara, per ogni punto in cui è stata tentata una compensazione, se lo stato osservato dopo la compensazione coincide con quello precedente all'avvio del lotto, e nomina ogni scostamento rilevato invece di riportare solo l'esito complessivo.
+  - [ ] AC-4 - `RESULT.md` nomina i punti di interruzione che finiscono legittimamente in "bloccato in attesa dell'utente", con la ragione per ciascuno, distinguendo l'errore locale su un singolo file dall'errore sistemico che sospende il lotto, e riporta la classificazione adottata per ogni classe di errore provata.
+  - [ ] AC-5 - `RESULT.md` riporta l'esito misurato dei casi in cui l'interruzione lascia immagine e sidecar in posizioni diverse: se il recupero rileva la separazione, e cosa riferisce.
+  - [ ] AC-6 - `RESULT.md` chiude con l'esito su ADR-007, **confermato** oppure **emendato**; se il numero o la definizione dei cinque esiti non regge alla misura, il documento propone l'insieme di esiti sostitutivo con la traccia che lo motiva.
+  - [ ] AC-7 - Un punto di interruzione dal quale nessuno dei cinque esiti è raggiungibile - stato raggiunto non riconoscibile dopo il recupero - è registrato come **esito non supportabile**, con la traccia che lo dimostra; non viene riclassificato come "bloccato in attesa dell'utente" per far chiudere la tabella.
+
+  ## Fuori ambito
+
+  Nessuna implementazione della macchina a stati `FileOps` destinata al prodotto, nessuna interfaccia della cronologia dei lotti né comando di annullamento rivolto all'utente, e nessuna integrazione dei test di iniezione di arresti nella pipeline di integrazione continua: appartengono alla tappa che costruisce le operazioni massive. Il cancello non prova la rinomina guidata da pattern né lo smistamento per regole come funzioni, ma solo il lotto come sequenza recuperabile, e non tocca gli altri tre cancelli.
+
+  ## Contesto Wiki
+
+  - `overview` - vocabolario dei contratti: **recuperabile** e non atomico per un lotto di operazioni su file
+  - `operations/development` - test di iniezione di arresti come verifica del contratto di ADR-007, non come test facoltativi
+  - `architecture/context-map` - aree previste "Operazioni su file" e "Stato durevole", oggi senza alcuna evidenza
+  - `references/prd` - ADR-007, ADR-015, FR-053, FR-077 a FR-084, FR-086 a FR-090, NFR-A2, NFR-A3, NFR-I8
+history:
+  - status: TODO
+    at: "2026-08-26T13:23:00Z"
