@@ -2,7 +2,7 @@
 
 ## Architecture
 
-* [Mappa dei contesti](architecture/context-map.md) - Confini logici di iMAGE Surfer; nessun contesto è evidenziato da codice, le undici aree di capacità previste dal PRD 1.1 sono registrate come non risolte. _State: generated._
+* [Mappa dei contesti](architecture/context-map.md) - Confini logici di iMAGE Surfer; nessun contesto è evidenziato da codice, le dodici aree previste dal PRD 1.2 sono registrate come non risolte e cinque ADR sono ancora provvisori. _State: generated._
 
 ## Engineering
 
@@ -18,4 +18,4 @@
 
 ## References
 
-* [PRD di iMAGE Surfer](references/prd.md) - Documento di requisiti di prodotto di iMAGE Surfer, dalla sessione di inception del 2026-08-24 e dalla revisione architetturale 1.1 del 2026-08-25; unica fonte dell'intento in assenza di codice. _State: generated._
+* [PRD di iMAGE Surfer](references/prd.md) - Documento di requisiti di prodotto di iMAGE Surfer, dalla sessione di inception del 2026-08-24 e dalle due revisioni architetturali esterne; unica fonte dell'intento in assenza di codice. _State: generated._
