@@ -23,15 +23,15 @@ Le aree di capacità **previste** dal PRD sono elencate qui sotto come attese di
 |---|---|---|
 | Catalogo cartella | enumerazione, filtro per tipo immagine, identità dalle primitive di sistema e validità come chiavi distinte, osservazione con riconciliazione per differenza e tempo massimo, ordinamenti | nessuna |
 | Metadati | lettura e normalizzazione di EXIF/IPTC/GPS e proprietà immagine | nessuna |
-| Sidecar | lettura e scrittura atomica del singolo file XMP affiancato, coordinamento tra processi, controllo sulla versione osservata, conflitto esplicito, conservazione dei campi di terzi | nessuna |
+| Sidecar | scrittura atomica del singolo file XMP affiancato, coordinamento **cooperativo** con controllo della versione dentro l'accesso coordinato, verifica dopo la sostituzione, recupero da scritture non coordinate, conservazione dei campi di terzi | nessuna |
 | Anteprime | generazione, cache su disco, decodifica sempre ridimensionata | nessuna |
-| Ammissione del lavoro | code specializzate per tipo sotto budget di memoria comune misurato, banda di ritenzione con isteresi | nessuna |
+| Ammissione del lavoro | code specializzate per tipo sotto budget comune, **stime conservative calibrate su misure reali** con limite per singolo elemento, banda di ritenzione con isteresi | nessuna |
 | Duplicati | duplicati esatti per contenuto a stadi di costo crescente e gruppi di quasi-duplicati | nessuna |
 | Qualità e selezione | soggetto, qualità tecnica, punteggio estetico, punteggio scomposto con sovrapposizioni dichiarate e versionamento semantico | nessuna |
-| Accesso al filesystem | punto unico di scrittura, bookmark delle cartelle, richiesta contestuale dei permessi | nessuna |
-| Operazioni su file | macchina a stati con log di intenti, ricontrollo delle precondizioni, passi idempotenti, ripresa o compensazione, Cestino | nessuna |
-| Cache derivata | archivio eliminabile dei soli dati ricalcolabili | nessuna |
-| Stato durevole | archivio non eliminabile: registro delle operazioni, lotti aperti, scritture in attesa o fallite, stato di sincronizzazione | nessuna |
+| Accesso al filesystem | punto unico di scrittura, bookmark delle cartelle, richiesta contestuale dei permessi. Confine **di codice**, non di sicurezza | nessuna |
+| Operazioni su file | macchina a stati con log di intenti, ricontrollo delle precondizioni, passi idempotenti, **cinque esiti**, distinzione errore locale/sistemico, Cestino | nessuna |
+| Cache derivata | archivio eliminabile dei soli dati ricalcolabili; **non autorevole**, può restare indietro ed essere riallineata | nessuna |
+| Stato durevole | archivio non eliminabile **con contratto operativo proprio** (integrità, recupero da corruzione, retention limitata, disco pieno definito): registro, lotti aperti, scritture in attesa o fallite, stato di sincronizzazione | nessuna |
 | Interfaccia | griglia, anteprima grande, pannello metadati, mappa dei tasti | nessuna |
 
 <!-- archetipo:wiki section=relationships -->
@@ -54,7 +54,9 @@ Nessuna infrastruttura condivisa è presente nel repository. Il PRD 1.2 distingu
 - il **livello unico di accesso in scrittura al filesystem**, punto d'innesto dichiarato per una futura sandbox e sede della richiesta contestuale dei permessi;
 - l'**ammissione del lavoro**, che il PRD 1.2 non modella più come coda unica ma come code specializzate per tipo sotto una politica di budget comune con costi misurati.
 
-Il vocabolario dei contratti è dichiarato e va rispettato quando la Wiki descriverà il codice: **ricostruibile** per la cache derivata, **recuperabile** (non atomico) per un lotto di operazioni su file, **best-effort** per il recupero dell'associazione tra giudizio e immagine nei casi dichiarati tali.
+Le tre sedi non sono tenute insieme da transazioni — il filesystem non ne offre — ma da un **invariante direzionale**: stato durevole e sidecar sono autorevoli, la cache può restare indietro ed essere riallineata, con ordine di scrittura dichiarato e riconciliazione delle righe non allineate al riavvio. Il PRD 1.2 affermava che i due archivi non condividessero invarianti; la 1.3 corregge: l'invariante esiste ed è direzionale.
+
+Il vocabolario dei contratti è dichiarato e va rispettato quando la Wiki descriverà il codice: **ricostruibile** per la cache derivata, **recuperabile** (non atomico e non sempre concludibile) per un lotto di operazioni su file, **best-effort** per il recupero dell'associazione tra giudizio e immagine e per la protezione della scrittura del sidecar verso applicazioni che non si coordinano. Nessuno dei tre è *garantito*, e il PRD dichiara come regola che **un meccanismo cooperativo o best-effort non venga mai descritto come se fosse impositivo**.
 
 <!-- archetipo:wiki section=uncertainties -->
 
@@ -62,7 +64,8 @@ Il vocabolario dei contratti è dichiarato e va rispettato quando la Wiki descri
 
 - **Tutti i confini sono non risolti.** Le aree previste derivano dalla struttura di pacchetti proposta nel PRD, che è una proposta architetturale e non una constatazione. La loro effettiva granularità si deciderà su codice. Due revisioni successive hanno modificato l'elenco — la 1.1 ha estratto sidecar, pianificazione del lavoro e accesso al filesystem; la 1.2 ha scisso l'indice in due archivi — segno che la granularità proposta è ancora instabile.
 - **Cinque ADR sono dichiarati provvisori dal PRD stesso.** ADR-007 (recuperabilità dei lotti), 009 (code e budget), 011 (identità e matrice dei casi), 012 (eventi del filesystem) e 013 (sidecar XMP) sono subordinati all'esito di quattro cancelli tecnici che precedono la costruzione. Finché quei cancelli non producono un esito scritto, le aree che ne dipendono non sono solo prive di codice: sono prive di una decisione chiusa. Questa è la principale incertezza della mappa.
-- **Il confine più incerto è quello tra sidecar, cache e stato durevole.** Il PRD 1.2 descrive tre sedi dello stesso giudizio con garanzie diverse, uno stato di sincronizzazione esplicito e conflitti non risolvibili in silenzio. Se sul codice quella macchina a stati risultasse sostanziale, la sincronizzazione dei giudizi diventerebbe una capacità a sé e non un dettaglio di tre componenti.
+- **Il confine più incerto è quello tra sidecar, cache e stato durevole.** Il PRD descrive tre sedi dello stesso giudizio con garanzie diverse, un invariante direzionale di autorità, uno stato di sincronizzazione esplicito e conflitti non risolvibili in silenzio nemmeno verso applicazioni che non si coordinano. Se sul codice quella macchina a stati risultasse sostanziale, la sincronizzazione dei giudizi diventerebbe una capacità a sé e non un dettaglio di tre componenti.
+- **Il perimetro di sicurezza non coincide con nessun confine di questa mappa.** `Access` è un confine di codice; il processo resta unico, non in sandbox, e interpreta dati non fidati. ADR-016 registra il rischio come accettato per l'MVP e prevede l'isolamento futuro di decodifica e analisi in un processo separato: quando arriverà, sarà il primo confine **di sicurezza** del sistema e taglierà la mappa in modo trasversale alle aree qui elencate.
 - Il PRD contiene assunti espressamente dichiarati da validare — combinazione di primitive di identità, convenzione di nome del sidecar, rappresentazione dello scarto, politica di conflitto in interfaccia, finestra di quiete e tempo massimo di riconciliazione, comportamento su volumi di rete e cartelle sincronizzate, costo in memoria per tipo di lavoro, ampiezza della banda di ritenzione, affidabilità dell'euristica sugli occhi, sovrapposizione tra qualità del volto e qualità tecnica, utilità del punteggio estetico, rinvio del supporto RAW, ricorsività delle operazioni massive — che possono modificare i confini prima che il codice esista. Sono attribuiti al PRD e non sono conoscenza verificata: vedi [PRD di iMAGE Surfer](/references/prd.md).
 
 ## Concetti collegati

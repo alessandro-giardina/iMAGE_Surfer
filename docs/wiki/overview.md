@@ -19,7 +19,9 @@ iMAGE Surfer è un'applicazione **nativa macOS** che tratta una cartella del fil
 
 Il principio portante è che **la cartella è la fonte di verità**, e il PRD lo estende al lavoro dell'utente: i giudizi (stelle e marcature) non vivono in una cache ma in sidecar XMP affiancati alle immagini, leggibili anche fuori dall'app.
 
-Il PRD 1.2 distingue **tre nature di dato** e le tiene in sedi diverse — dato derivato in una cache eliminabile, dato autorale nel sidecar, stato durevole di processo (registro delle operazioni, lotti aperti, scritture in attesa) in un archivio separato e non cancellabile — e dichiara un vocabolario di contratti che la Wiki deve rispettare quando descriverà il codice: **ricostruibile** per la cache, **recuperabile** e non atomico per un lotto di operazioni su file, **best-effort** per il recupero dell'associazione tra giudizio e immagine nei casi elencati come tali.
+Il PRD distingue **tre nature di dato** e le tiene in sedi diverse — dato derivato in una cache eliminabile, dato autorale nel sidecar, stato durevole di processo (registro delle operazioni, lotti aperti, scritture in attesa) in un archivio separato, non cancellabile e con contratto di durabilità proprio — tenute insieme da un **invariante direzionale**: stato durevole e sidecar sono autorevoli, la cache può restare indietro ed essere riallineata.
+
+Il documento dichiara un vocabolario di contratti che la Wiki deve rispettare quando descriverà il codice: **ricostruibile** per la cache, **recuperabile** — non atomico e non sempre concludibile — per un lotto di operazioni su file, **best-effort** per il recupero dell'associazione tra giudizio e immagine e per la protezione verso applicazioni che non si coordinano. Nessuno è *garantito*, ed è una regola esplicita del PRD che un meccanismo cooperativo non venga mai descritto come impositivo.
 
 Questo scopo è **intento di prodotto documentato**, non comportamento osservato: al momento della compilazione di questa mappa il repository non contiene codice applicativo. La fonte dell'intento è il PRD, rappresentato come concetto di riferimento: [PRD di iMAGE Surfer](/references/prd.md).
 
@@ -32,6 +34,8 @@ Dichiarati nel PRD, non verificabili su codice:
 - **Curatore di cartelle** — proprietario del Mac, utente unico e amministratore dell'app; scarica materiale fotografico in cartelle e lo screma, rinomina e riorganizza.
 - **Selezionatore sotto scadenza** — riceve cartelle di materiale altrui e deve consegnare pochi scatti selezionati e nominati secondo convenzione.
 - **Il sistema operativo** come attore tecnico: i servizi macOS (anteprime, lettura metadati, visione artificiale, Cestino, eventi del filesystem) sono la dipendenza portante del prodotto.
+- **Altre applicazioni sugli stessi file** come attore non controllato: strumenti fotografici che leggono e scrivono i sidecar, alcuni coordinandosi con il sistema e altri no. Il PRD 1.3 li tratta esplicitamente, perché il coordinamento vincola solo chi vi partecipa.
+- **Il contenuto dei file** come sorgente non fidata: le immagini arrivano da apparecchi e persone che l'utente non controlla, e vengono interpretate da un processo con pieni privilegi (ADR-016).
 
 <!-- archetipo:wiki section=stack -->
 
@@ -48,9 +52,10 @@ Lo stack è **prescritto dal PRD e non ancora presente nel repository**. Nessun 
 | Visione artificiale | Vision (feature print, volti, **landmark**; lo stato aperto/chiuso degli occhi è euristica dell'app, non API), Core ML | assente |
 | Osservazione filesystem | File System Events, eventi a granularità di file, identificatore d'evento persistito e legato al volume | assente |
 | Identità dei file | Chiavi di risorsa di Foundation + bookmark persistenti; combinazione da stabilire in Tappa 0 | assente |
-| Coordinamento tra processi | `NSFileCoordinator` per gli accessi concorrenti al sidecar | assente |
-| Persistenza | SQLite tramite GRDB.swift 7.x, in **due file distinti** (cache derivata, stato durevole); sidecar XMP (schema Basic) per i giudizi | assente |
-| Test | Swift Testing, XCUITest, lunga durata su memoria ed eventi, iniezione di arresti sui lotti | assente |
+| Coordinamento tra processi | `NSFileCoordinator` per gli accessi concorrenti al sidecar — **cooperativo**, non impositivo | assente |
+| Isolamento di processo | XPC — **non usato nell'MVP**, registrato come innesto previsto per isolare la decodifica di dati non fidati (ADR-016) | assente |
+| Persistenza | SQLite tramite GRDB.swift 7.x, in **due file distinti** con impostazioni di durabilità diverse (cache derivata, stato durevole); sidecar XMP (schema Basic) per i giudizi | assente |
+| Test | Swift Testing, XCUITest, lunga durata su memoria ed eventi, iniezione di arresti sui lotti, corpus di file malformati | assente |
 
 <!-- archetipo:wiki section=scope -->
 

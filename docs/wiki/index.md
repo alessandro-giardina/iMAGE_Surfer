@@ -18,4 +18,4 @@
 
 ## References
 
-* [PRD di iMAGE Surfer](references/prd.md) - Documento di requisiti di prodotto di iMAGE Surfer, dalla sessione di inception del 2026-08-24 e dalle due revisioni architetturali esterne; unica fonte dell'intento in assenza di codice. _State: generated._
+* [PRD di iMAGE Surfer](references/prd.md) - Documento di requisiti di prodotto di iMAGE Surfer, dalla sessione di inception del 2026-08-24 e dalle tre revisioni architetturali esterne; unica fonte dell'intento in assenza di codice. _State: generated._
