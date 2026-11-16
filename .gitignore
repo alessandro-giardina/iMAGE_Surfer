@@ -105,3 +105,7 @@ Scripts/coreml-conversion/__pycache__/
 
 # Claude Code personal overrides (shared settings live in .claude/settings.json)
 .claude/settings.local.json
+
+# Cancello 1 - dataset ed esecuzioni generate (la procedura e la configurazione sono versionate)
+Spikes/*/.data/
+Spikes/*/runs/

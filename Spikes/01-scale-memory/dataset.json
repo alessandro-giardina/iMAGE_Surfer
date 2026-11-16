@@ -1,0 +1,83 @@
+{
+  "schema": "image-surfer/spike-01/dataset/v1",
+  "seed": 20260826,
+  "resolutionClasses": {
+    "S": [1600, 1200],
+    "M": [4032, 3024],
+    "L": [8000, 6000]
+  },
+  "bytesPerMegapixelTarget": {
+    "jpeg": 0.35,
+    "heic": 0.18,
+    "png": 1.5,
+    "tiff": 3.0
+  },
+  "tolerance": 0.20,
+  "scrollFolder": {
+    "name": "scroll-50k",
+    "total": 50000,
+    "uniquePerCell": 250,
+    "cloneRemainder": true,
+    "distribution": {
+      "jpeg": { "S": 6000, "M": 21000, "L": 3000 },
+      "heic": { "S": 2500, "M": 9000, "L": 1000 },
+      "png": { "S": 3000, "M": 1800, "L": 200 },
+      "tiff": { "S": 1500, "M": 900, "L": 100 }
+    }
+  },
+  "firstScreenFolders": {
+    "count": 10,
+    "size": 3000,
+    "unique": true,
+    "cloneRemainder": false,
+    "distribution": {
+      "jpeg": { "S": 360, "M": 1260, "L": 180 },
+      "heic": { "S": 150, "M": 540, "L": 60 },
+      "png": { "S": 180, "M": 108, "L": 12 },
+      "tiff": { "S": 90, "M": 54, "L": 6 }
+    }
+  },
+  "itemCostPool": {
+    "uniquePerCell": 25
+  },
+  "anomalousItems": [
+    { "format": "tiff", "pixels": [16000, 12000], "count": 3 }
+  ],
+  "smokeProfile": {
+    "resolutionClasses": {
+      "S": [800, 600],
+      "M": [2016, 1512],
+      "L": [4000, 3000]
+    },
+    "scrollFolder": {
+      "name": "scroll-50k",
+      "total": 240,
+      "uniquePerCell": 4,
+      "cloneRemainder": true,
+      "distribution": {
+        "jpeg": { "S": 20, "M": 20, "L": 20 },
+        "heic": { "S": 20, "M": 20, "L": 20 },
+        "png": { "S": 20, "M": 20, "L": 20 },
+        "tiff": { "S": 20, "M": 20, "L": 20 }
+      }
+    },
+    "firstScreenFolders": {
+      "count": 2,
+      "size": 24,
+      "unique": true,
+      "cloneRemainder": false,
+      "distribution": {
+        "jpeg": { "S": 2, "M": 2, "L": 2 },
+        "heic": { "S": 2, "M": 2, "L": 2 },
+        "png": { "S": 2, "M": 2, "L": 2 },
+        "tiff": { "S": 2, "M": 2, "L": 2 }
+      }
+    },
+    "itemCostPool": {
+      "uniquePerCell": 2
+    },
+    "anomalousItems": [
+      { "format": "tiff", "pixels": [8000, 6000], "count": 1 }
+    ]
+  }
+}

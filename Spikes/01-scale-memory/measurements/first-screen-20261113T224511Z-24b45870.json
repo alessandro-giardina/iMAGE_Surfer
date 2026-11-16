@@ -1,0 +1,229 @@
+{
+  "bench" : "first-screen",
+  "datasetManifestDigest" : "9105364e6fa328eef58cafd0ffa9de26064eee15970907bf757ea13effae2b4d",
+  "derived" : {
+
+  },
+  "dispersion" : {
+    "compositionMs" : {
+      "iqr" : 0.02829099999985374,
+      "max" : 1.0936669999999822,
+      "mean" : 1.0343582000000198,
+      "median" : 1.040625000000091,
+      "min" : 0.9592079999999896,
+      "n" : 5,
+      "p95" : 1.0855917999999747,
+      "stddev" : 0.04911818889881015
+    },
+    "firstScreenMs" : {
+      "iqr" : 931.965916,
+      "max" : 1776.868083,
+      "mean" : 1177.1619414000002,
+      "median" : 884.383291,
+      "min" : 652.487333,
+      "n" : 5,
+      "p95" : 1771.898158,
+      "stddev" : 542.8253349190264
+    },
+    "firstUrlsReadyMs" : {
+      "iqr" : 2.4563339999999996,
+      "max" : 7.799666,
+      "mean" : 4.920716400000001,
+      "median" : 4.172542,
+      "min" : 2.545458,
+      "n" : 5,
+      "p95" : 7.4939578,
+      "stddev" : 2.0938387340149434
+    },
+    "footprintAfterTeardownBytes" : {
+      "iqr" : 557056,
+      "max" : 89146424,
+      "mean" : 86901816,
+      "median" : 86590520,
+      "min" : 86049848,
+      "n" : 5,
+      "p95" : 88645073.6,
+      "stddev" : 1284603.8166532123
+    },
+    "thumbnailFailures" : {
+      "iqr" : 0,
+      "max" : 0,
+      "mean" : 0,
+      "median" : 0,
+      "min" : 0,
+      "n" : 5,
+      "p95" : 0,
+      "stddev" : 0
+    },
+    "thumbnailsReadyMs" : {
+      "iqr" : 932.0345829999999,
+      "max" : 1775.827458,
+      "mean" : 1176.1275832,
+      "median" : 883.33,
+      "min" : 651.528125,
+      "n" : 5,
+      "p95" : 1770.860658,
+      "stddev" : 542.8202318064094
+    },
+    "visibleCount" : {
+      "iqr" : 0,
+      "max" : 24,
+      "mean" : 24,
+      "median" : 24,
+      "min" : 24,
+      "n" : 5,
+      "p95" : 24,
+      "stddev" : 0
+    }
+  },
+  "finishedAt" : "2026-11-13T22:45:22Z",
+  "host" : {
+    "activeProcessorCount" : 10,
+    "cpuBrand" : "Apple M1 Pro",
+    "efficiencyCores" : 2,
+    "lowPowerModeEnabled" : false,
+    "model" : "MacBookPro18,3",
+    "onACPower" : true,
+    "osBuildVersion" : "26B123",
+    "osProductVersion" : "27.2.0",
+    "performanceCores" : 8,
+    "physicalMemoryBytes" : 34359738368,
+    "sdkVersion" : "27.2",
+    "swiftVersion" : "6.4",
+    "thermalState" : "nominal",
+    "volumeAvailableBytes" : 344179093504,
+    "volumeFileSystemType" : "apfs",
+    "volumeIsSolidState" : true
+  },
+  "measurementId" : "24b45870-5d53-4120-9a20-2dff884bad0c",
+  "parameters" : {
+    "baselineFootprintBytes" : "92980256",
+    "coldCache" : "una cartella diversa e mai letta per ripetizione; nessun sudo purge",
+    "columns" : "6",
+    "folders" : "p1-run-01,p1-run-03,p1-run-05,p1-run-07,p1-run-09",
+    "frameOracle" : "completamento della transazione Core Animation (CATransaction.setCompletionBlock) in cui viene assegnata l'anteprima dell'ultimo elemento che interseca la porta di vista iniziale",
+    "itemSide" : "240",
+    "maxPixelSize" : "480",
+    "queueWidth" : "8",
+    "screenName" : "Built-in Retina Display",
+    "screenScaleFactor" : "2.0",
+    "screenSize" : "1512x982",
+    "sleepPrevention" : "ProcessInfo.beginActivity: userInitiated, idleDisplaySleepDisabled, idleSystemSleepDisabled, latencyCritical",
+    "spacing" : "8",
+    "t0" : "inizio dell'enumerazione della cartella",
+    "thumbnailPath" : "quicklook",
+    "thumbnailScale" : "2.0",
+    "visibleCount" : "24",
+    "window" : "1512x982"
+  },
+  "profile" : "full",
+  "repetitions" : [
+    {
+      "flags" : {
+        "folderPreviouslyRead" : false,
+        "footprintDidNotSettle" : false,
+        "lowPowerModeEnabled" : false,
+        "onACPower" : true,
+        "windowVisible" : true
+      },
+      "index" : 0,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "compositionMs" : 1.0532909999999447,
+        "firstScreenMs" : 884.383291,
+        "firstUrlsReadyMs" : 3.814791,
+        "footprintAfterTeardownBytes" : 89146424,
+        "thumbnailFailures" : 0,
+        "thumbnailsReadyMs" : 883.33,
+        "visibleCount" : 24
+      }
+    },
+    {
+      "flags" : {
+        "folderPreviouslyRead" : false,
+        "footprintDidNotSettle" : false,
+        "lowPowerModeEnabled" : false,
+        "onACPower" : true,
+        "windowVisible" : true
+      },
+      "index" : 1,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "compositionMs" : 1.040625000000091,
+        "firstScreenMs" : 1776.868083,
+        "firstUrlsReadyMs" : 2.545458,
+        "footprintAfterTeardownBytes" : 86082616,
+        "thumbnailFailures" : 0,
+        "thumbnailsReadyMs" : 1775.827458,
+        "visibleCount" : 24
+      }
+    },
+    {
+      "flags" : {
+        "folderPreviouslyRead" : false,
+        "footprintDidNotSettle" : false,
+        "lowPowerModeEnabled" : false,
+        "onACPower" : true,
+        "windowVisible" : true
+      },
+      "index" : 2,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "compositionMs" : 1.0936669999999822,
+        "firstScreenMs" : 820.052542,
+        "firstUrlsReadyMs" : 6.271125,
+        "footprintAfterTeardownBytes" : 86049848,
+        "thumbnailFailures" : 0,
+        "thumbnailsReadyMs" : 818.958875,
+        "visibleCount" : 24
+      }
+    },
+    {
+      "flags" : {
+        "folderPreviouslyRead" : false,
+        "footprintDidNotSettle" : false,
+        "lowPowerModeEnabled" : false,
+        "onACPower" : true,
+        "windowVisible" : true
+      },
+      "index" : 3,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "compositionMs" : 0.9592079999999896,
+        "firstScreenMs" : 652.487333,
+        "firstUrlsReadyMs" : 4.172542,
+        "footprintAfterTeardownBytes" : 86590520,
+        "thumbnailFailures" : 0,
+        "thumbnailsReadyMs" : 651.528125,
+        "visibleCount" : 24
+      }
+    },
+    {
+      "flags" : {
+        "folderPreviouslyRead" : false,
+        "footprintDidNotSettle" : false,
+        "lowPowerModeEnabled" : false,
+        "onACPower" : true,
+        "windowVisible" : true
+      },
+      "index" : 4,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "compositionMs" : 1.025000000000091,
+        "firstScreenMs" : 1752.018458,
+        "firstUrlsReadyMs" : 7.799666,
+        "footprintAfterTeardownBytes" : 86639672,
+        "thumbnailFailures" : 0,
+        "thumbnailsReadyMs" : 1750.993458,
+        "visibleCount" : 24
+      }
+    }
+  ],
+  "schema" : "image-surfer/spike-01/measurement/v1",
+  "startedAt" : "2026-11-13T22:45:11Z"
+}

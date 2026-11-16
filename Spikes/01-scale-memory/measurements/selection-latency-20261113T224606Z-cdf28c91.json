@@ -1,0 +1,3102 @@
+{
+  "bench" : "selection-latency",
+  "datasetManifestDigest" : "9105364e6fa328eef58cafd0ffa9de26064eee15970907bf757ea13effae2b4d",
+  "derived" : {
+    "environmentAtEnd" : {
+      "lowPowerModeEnabled" : false,
+      "onACPower" : true
+    },
+    "movesOver100ms" : 0,
+    "queueDepthAtEnd" : {
+      "decode" : 48656,
+      "io" : 0,
+      "quicklook" : 0,
+      "vision" : 31512
+    },
+    "queueDepthAtStart" : {
+      "decode" : 2320,
+      "io" : 47672,
+      "quicklook" : 0,
+      "vision" : 32700
+    },
+    "queuesSaturatedAtStart" : true,
+    "thresholdMs" : 100,
+    "windowVisibleAtEnd" : true,
+    "windowVisibleAtStart" : true
+  },
+  "dispersion" : {
+    "selectionHandledMs" : {
+      "iqr" : 0.03864675000000001,
+      "max" : 2.511958,
+      "mean" : 0.3145583250000001,
+      "median" : 0.289333,
+      "min" : 0.242959,
+      "n" : 200,
+      "p95" : 0.35271839999999993,
+      "stddev" : 0.17975279191164048
+    },
+    "selectionLatencyMs" : {
+      "iqr" : 0.11244775000000007,
+      "max" : 2.799625,
+      "mean" : 0.6857835400000003,
+      "median" : 0.5010410000000001,
+      "min" : 0.435084,
+      "n" : 200,
+      "p95" : 1.5523208499999985,
+      "stddev" : 0.43625860753963414
+    }
+  },
+  "finishedAt" : "2026-11-13T22:46:41Z",
+  "host" : {
+    "activeProcessorCount" : 10,
+    "cpuBrand" : "Apple M1 Pro",
+    "efficiencyCores" : 2,
+    "lowPowerModeEnabled" : false,
+    "model" : "MacBookPro18,3",
+    "onACPower" : true,
+    "osBuildVersion" : "26B123",
+    "osProductVersion" : "27.2.0",
+    "performanceCores" : 8,
+    "physicalMemoryBytes" : 34359738368,
+    "sdkVersion" : "27.2",
+    "swiftVersion" : "6.4",
+    "thermalState" : "nominal",
+    "volumeAvailableBytes" : 344173944832,
+    "volumeFileSystemType" : "apfs",
+    "volumeIsSolidState" : true
+  },
+  "measurementId" : "cdf28c91-87ea-4691-af7e-23ca51274bed",
+  "parameters" : {
+    "cadenceMs" : "150",
+    "columns" : "6",
+    "event" : "NSEvent keyDown/keyUp di frecce via NSApp.postEvent, percorso a serpentina: destra lungo le righe pari, sinistra lungo le dispari, giù a fine riga (NSCollectionView non va a capo con la freccia destra)",
+    "folder" : "scroll-50k",
+    "frameOracle" : "completamento della transazione Core Animation (CATransaction.setCompletionBlock) in cui selectionIndexPaths riflette il nuovo elemento",
+    "itemSide" : "240",
+    "items" : "50000",
+    "moves" : "200",
+    "queueDepthAtEnd.decode" : "48656",
+    "queueDepthAtEnd.io" : "0",
+    "queueDepthAtEnd.quicklook" : "0",
+    "queueDepthAtEnd.vision" : "31512",
+    "queueDepthAtStart.decode" : "2320",
+    "queueDepthAtStart.io" : "47672",
+    "queueDepthAtStart.quicklook" : "0",
+    "queueDepthAtStart.vision" : "32700",
+    "queueWidth" : "8",
+    "screenName" : "Built-in Retina Display",
+    "screenScaleFactor" : "2.0",
+    "screenSize" : "1512x982",
+    "sleepPrevention" : "ProcessInfo.beginActivity: userInitiated, idleDisplaySleepDisabled, idleSystemSleepDisabled, latencyCritical",
+    "spacing" : "8",
+    "thumbnailPath" : "imageio",
+    "thumbnailScale" : "2.0",
+    "visionItems" : "32700",
+    "window" : "1512x982"
+  },
+  "profile" : "full",
+  "repetitions" : [
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 0,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 2.511958,
+        "selectionLatencyMs" : 2.799625
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 1,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.304,
+        "selectionLatencyMs" : 0.493417
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 2,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.2725,
+        "selectionLatencyMs" : 0.506792
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 3,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.287583,
+        "selectionLatencyMs" : 0.473542
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 4,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.26225,
+        "selectionLatencyMs" : 0.451833
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 5,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.310833,
+        "selectionLatencyMs" : 0.594417
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 6,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.268708,
+        "selectionLatencyMs" : 0.456625
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 7,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.327458,
+        "selectionLatencyMs" : 0.57075
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 8,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.319084,
+        "selectionLatencyMs" : 0.522625
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 9,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.292625,
+        "selectionLatencyMs" : 0.544792
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 10,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.291041,
+        "selectionLatencyMs" : 0.529375
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 11,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.331666,
+        "selectionLatencyMs" : 0.521375
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 12,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.288125,
+        "selectionLatencyMs" : 0.480667
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 13,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.295084,
+        "selectionLatencyMs" : 0.495417
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 14,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.280459,
+        "selectionLatencyMs" : 0.48175
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 15,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.281959,
+        "selectionLatencyMs" : 0.561334
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 16,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.268167,
+        "selectionLatencyMs" : 0.450875
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 17,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.291166,
+        "selectionLatencyMs" : 0.893625
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 18,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.260417,
+        "selectionLatencyMs" : 0.435084
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 19,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.291458,
+        "selectionLatencyMs" : 0.500666
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 20,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.313042,
+        "selectionLatencyMs" : 0.540167
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 21,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.298584,
+        "selectionLatencyMs" : 0.504584
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 22,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.264667,
+        "selectionLatencyMs" : 0.457417
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 23,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.318125,
+        "selectionLatencyMs" : 2.319166
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 24,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.308583,
+        "selectionLatencyMs" : 0.598333
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 25,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.297542,
+        "selectionLatencyMs" : 0.498459
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 26,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.300917,
+        "selectionLatencyMs" : 0.503375
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 27,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.266459,
+        "selectionLatencyMs" : 0.461959
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 28,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.273375,
+        "selectionLatencyMs" : 0.521625
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 29,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.3325,
+        "selectionLatencyMs" : 1.937584
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 30,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.2865,
+        "selectionLatencyMs" : 0.473416
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 31,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.347958,
+        "selectionLatencyMs" : 0.712583
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 32,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.355291,
+        "selectionLatencyMs" : 0.579833
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 33,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.24625,
+        "selectionLatencyMs" : 0.438458
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 34,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.271375,
+        "selectionLatencyMs" : 0.469375
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 35,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.280667,
+        "selectionLatencyMs" : 2.027584
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 36,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.287792,
+        "selectionLatencyMs" : 0.483208
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 37,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.363958,
+        "selectionLatencyMs" : 0.543
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 38,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.3395,
+        "selectionLatencyMs" : 0.640583
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 39,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.263042,
+        "selectionLatencyMs" : 0.442209
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 40,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.277958,
+        "selectionLatencyMs" : 0.514833
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 41,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.3075,
+        "selectionLatencyMs" : 1.959292
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 42,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.28325,
+        "selectionLatencyMs" : 0.492958
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 43,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.267875,
+        "selectionLatencyMs" : 0.454083
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 44,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.26875,
+        "selectionLatencyMs" : 0.48525
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 45,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.264,
+        "selectionLatencyMs" : 0.504167
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 46,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.277625,
+        "selectionLatencyMs" : 0.505792
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 47,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.420791,
+        "selectionLatencyMs" : 2.016458
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 48,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.292416,
+        "selectionLatencyMs" : 0.504375
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 49,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.350875,
+        "selectionLatencyMs" : 0.630583
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 50,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.270625,
+        "selectionLatencyMs" : 0.495625
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 51,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.254833,
+        "selectionLatencyMs" : 0.486125
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 52,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.267,
+        "selectionLatencyMs" : 0.44675
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 53,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.338334,
+        "selectionLatencyMs" : 2.37925
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 54,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.301375,
+        "selectionLatencyMs" : 0.501416
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 55,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.268208,
+        "selectionLatencyMs" : 0.439792
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 56,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.288333,
+        "selectionLatencyMs" : 0.480875
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 57,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.27,
+        "selectionLatencyMs" : 0.458833
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 58,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.714083,
+        "selectionLatencyMs" : 1.341875
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 59,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.288,
+        "selectionLatencyMs" : 2.003916
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 60,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.292708,
+        "selectionLatencyMs" : 0.485083
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 61,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.263625,
+        "selectionLatencyMs" : 0.447375
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 62,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.323917,
+        "selectionLatencyMs" : 0.55975
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 63,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.298125,
+        "selectionLatencyMs" : 0.5295
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 64,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.305083,
+        "selectionLatencyMs" : 0.574333
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 65,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.271625,
+        "selectionLatencyMs" : 1.79775
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 66,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.279792,
+        "selectionLatencyMs" : 0.49775
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 67,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.262625,
+        "selectionLatencyMs" : 0.448417
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 68,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.290917,
+        "selectionLatencyMs" : 0.499542
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 69,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.2705,
+        "selectionLatencyMs" : 0.446375
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 70,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.298667,
+        "selectionLatencyMs" : 0.514542
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 71,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.291542,
+        "selectionLatencyMs" : 1.429375
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 72,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.294542,
+        "selectionLatencyMs" : 0.486042
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 73,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.26475,
+        "selectionLatencyMs" : 0.450958
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 74,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.85475,
+        "selectionLatencyMs" : 1.634417
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 75,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.284583,
+        "selectionLatencyMs" : 0.487166
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 76,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.279791,
+        "selectionLatencyMs" : 0.473083
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 77,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.288625,
+        "selectionLatencyMs" : 1.34225
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 78,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.315,
+        "selectionLatencyMs" : 0.557375
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 79,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.25975,
+        "selectionLatencyMs" : 0.45075
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 80,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.292167,
+        "selectionLatencyMs" : 0.478
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 81,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.283708,
+        "selectionLatencyMs" : 0.504708
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 82,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.314041,
+        "selectionLatencyMs" : 0.524458
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 83,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.293292,
+        "selectionLatencyMs" : 1.325709
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 84,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.293459,
+        "selectionLatencyMs" : 0.479667
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 85,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.302875,
+        "selectionLatencyMs" : 0.507542
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 86,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.279042,
+        "selectionLatencyMs" : 0.487625
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 87,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.273916,
+        "selectionLatencyMs" : 0.463791
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 88,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.33325,
+        "selectionLatencyMs" : 0.640458
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 89,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.301125,
+        "selectionLatencyMs" : 1.405292
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 90,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.315416,
+        "selectionLatencyMs" : 0.556166
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 91,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.285583,
+        "selectionLatencyMs" : 0.493042
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 92,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.276917,
+        "selectionLatencyMs" : 0.504667
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 93,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.295083,
+        "selectionLatencyMs" : 0.51625
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 94,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.271833,
+        "selectionLatencyMs" : 0.464708
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 95,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.306833,
+        "selectionLatencyMs" : 1.273666
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 96,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.300875,
+        "selectionLatencyMs" : 0.487375
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 97,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.280167,
+        "selectionLatencyMs" : 0.459667
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 98,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.288375,
+        "selectionLatencyMs" : 0.47925
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 99,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.246959,
+        "selectionLatencyMs" : 0.451959
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 100,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.287292,
+        "selectionLatencyMs" : 0.485167
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 101,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.308292,
+        "selectionLatencyMs" : 1.257833
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 102,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.304959,
+        "selectionLatencyMs" : 0.509
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 103,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.286958,
+        "selectionLatencyMs" : 0.478292
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 104,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.338125,
+        "selectionLatencyMs" : 0.534583
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 105,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.268875,
+        "selectionLatencyMs" : 0.453834
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 106,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.255917,
+        "selectionLatencyMs" : 0.456
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 107,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.290041,
+        "selectionLatencyMs" : 1.224083
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 108,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.325,
+        "selectionLatencyMs" : 0.556125
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 109,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.349292,
+        "selectionLatencyMs" : 0.547709
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 110,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.275667,
+        "selectionLatencyMs" : 0.45325
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 111,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.282666,
+        "selectionLatencyMs" : 0.469166
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 112,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.291166,
+        "selectionLatencyMs" : 0.507083
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 113,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.290542,
+        "selectionLatencyMs" : 1.206917
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 114,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.307333,
+        "selectionLatencyMs" : 0.499833
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 115,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.283417,
+        "selectionLatencyMs" : 0.464583
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 116,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.259917,
+        "selectionLatencyMs" : 0.441583
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 117,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.256666,
+        "selectionLatencyMs" : 0.445708
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 118,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.262458,
+        "selectionLatencyMs" : 0.570375
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 119,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.313083,
+        "selectionLatencyMs" : 1.4435
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 120,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.312417,
+        "selectionLatencyMs" : 0.561625
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 121,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.3295,
+        "selectionLatencyMs" : 0.573834
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 122,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.322375,
+        "selectionLatencyMs" : 0.515958
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 123,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.265125,
+        "selectionLatencyMs" : 0.457042
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 124,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.242959,
+        "selectionLatencyMs" : 0.437667
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 125,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.321916,
+        "selectionLatencyMs" : 1.387541
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 126,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.284958,
+        "selectionLatencyMs" : 0.472958
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 127,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.262792,
+        "selectionLatencyMs" : 0.443959
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 128,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.267667,
+        "selectionLatencyMs" : 0.481583
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 129,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.272333,
+        "selectionLatencyMs" : 0.445375
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 130,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.31475,
+        "selectionLatencyMs" : 0.521416
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 131,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.334166,
+        "selectionLatencyMs" : 1.315541
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 132,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.295667,
+        "selectionLatencyMs" : 0.502167
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 133,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.273292,
+        "selectionLatencyMs" : 0.465042
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 134,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.26925,
+        "selectionLatencyMs" : 0.47275
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 135,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.274,
+        "selectionLatencyMs" : 0.469584
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 136,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.271167,
+        "selectionLatencyMs" : 0.471542
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 137,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.297417,
+        "selectionLatencyMs" : 1.352833
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 138,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.268167,
+        "selectionLatencyMs" : 0.481792
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 139,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.317125,
+        "selectionLatencyMs" : 0.554458
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 140,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.262792,
+        "selectionLatencyMs" : 0.451167
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 141,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.384875,
+        "selectionLatencyMs" : 0.654792
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 142,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.287542,
+        "selectionLatencyMs" : 0.493042
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 143,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.323291,
+        "selectionLatencyMs" : 1.333375
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 144,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.2725,
+        "selectionLatencyMs" : 0.456583
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 145,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.276375,
+        "selectionLatencyMs" : 0.467125
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 146,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.247042,
+        "selectionLatencyMs" : 0.452375
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 147,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.283916,
+        "selectionLatencyMs" : 0.46875
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 148,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.285458,
+        "selectionLatencyMs" : 0.481458
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 149,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.295458,
+        "selectionLatencyMs" : 1.478958
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 150,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.261292,
+        "selectionLatencyMs" : 0.445
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 151,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.269916,
+        "selectionLatencyMs" : 0.457083
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 152,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.277583,
+        "selectionLatencyMs" : 0.4755
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 153,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.305417,
+        "selectionLatencyMs" : 0.495834
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 154,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.261667,
+        "selectionLatencyMs" : 0.524458
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 155,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.352583,
+        "selectionLatencyMs" : 1.32575
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 156,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 1.255708,
+        "selectionLatencyMs" : 1.508291
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 157,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.26225,
+        "selectionLatencyMs" : 0.450666
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 158,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.4665,
+        "selectionLatencyMs" : 0.677583
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 159,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.274458,
+        "selectionLatencyMs" : 0.458583
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 160,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.291917,
+        "selectionLatencyMs" : 0.513958
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 161,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.306292,
+        "selectionLatencyMs" : 1.179875
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 162,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.32825,
+        "selectionLatencyMs" : 0.587083
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 163,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.286791,
+        "selectionLatencyMs" : 0.467625
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 164,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.278708,
+        "selectionLatencyMs" : 0.465875
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 165,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.309667,
+        "selectionLatencyMs" : 0.536875
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 166,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.272333,
+        "selectionLatencyMs" : 0.468042
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 167,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.300708,
+        "selectionLatencyMs" : 1.444416
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 168,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.301958,
+        "selectionLatencyMs" : 0.513125
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 169,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.311417,
+        "selectionLatencyMs" : 0.508583
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 170,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.252667,
+        "selectionLatencyMs" : 0.437584
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 171,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.345584,
+        "selectionLatencyMs" : 0.5955
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 172,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.273333,
+        "selectionLatencyMs" : 0.447792
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 173,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.344791,
+        "selectionLatencyMs" : 1.289708
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 174,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.294333,
+        "selectionLatencyMs" : 0.499958
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 175,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.364625,
+        "selectionLatencyMs" : 0.651458
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 176,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.314292,
+        "selectionLatencyMs" : 0.671667
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 177,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.301959,
+        "selectionLatencyMs" : 0.521417
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 178,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.274,
+        "selectionLatencyMs" : 0.451291
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 179,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.315708,
+        "selectionLatencyMs" : 1.292875
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 180,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.286958,
+        "selectionLatencyMs" : 0.473875
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 181,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.293208,
+        "selectionLatencyMs" : 0.480667
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 182,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.273375,
+        "selectionLatencyMs" : 0.460125
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 183,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.258458,
+        "selectionLatencyMs" : 0.445833
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 184,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.267458,
+        "selectionLatencyMs" : 0.443917
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 185,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.3235,
+        "selectionLatencyMs" : 1.434833
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 186,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.312417,
+        "selectionLatencyMs" : 0.576417
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 187,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.283792,
+        "selectionLatencyMs" : 0.470333
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 188,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.281084,
+        "selectionLatencyMs" : 0.462875
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 189,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.253667,
+        "selectionLatencyMs" : 0.441792
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 190,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.310834,
+        "selectionLatencyMs" : 0.510167
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 191,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.349292,
+        "selectionLatencyMs" : 1.475417
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 192,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.27625,
+        "selectionLatencyMs" : 0.462125
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 193,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.295167,
+        "selectionLatencyMs" : 0.490667
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 194,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.265333,
+        "selectionLatencyMs" : 0.483
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 195,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.305125,
+        "selectionLatencyMs" : 0.528292
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : true
+      },
+      "index" : 196,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.269959,
+        "selectionLatencyMs" : 0.639167
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : true,
+        "leftArrow" : false,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 197,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.317541,
+        "selectionLatencyMs" : 1.548
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 198,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.314458,
+        "selectionLatencyMs" : 0.622958
+      }
+    },
+    {
+      "flags" : {
+        "downArrow" : false,
+        "leftArrow" : true,
+        "overThreshold" : false,
+        "rightArrow" : false
+      },
+      "index" : 199,
+      "thermalStateAtEnd" : "nominal",
+      "thermalStateAtStart" : "nominal",
+      "values" : {
+        "selectionHandledMs" : 0.312792,
+        "selectionLatencyMs" : 0.580292
+      }
+    }
+  ],
+  "schema" : "image-surfer/spike-01/measurement/v1",
+  "startedAt" : "2026-11-13T22:46:06Z"
+}

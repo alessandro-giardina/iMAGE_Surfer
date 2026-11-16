@@ -4,8 +4,8 @@ title: iMAGE Surfer
 description: Applicazione macOS nativa per browsing, triage e riorganizzazione di immagini in cartelle; stato attuale del repository e ambito della mappa
 status: generated
 sources:
-  - path: .
-    role: repository-inventory
+  - path: Spikes/01-scale-memory
+    role: implementation
   - path: docs/PRD.md
     role: product-intent
 ---
@@ -41,21 +41,25 @@ Dichiarati nel PRD, non verificabili su codice:
 
 ## Stack
 
-Lo stack è **prescritto dal PRD e non ancora presente nel repository**. Nessun manifest di build, nessuna configurazione di progetto e nessun file sorgente sono stati rilevati dall'ispezione.
+Lo stack è **prescritto dal PRD**, e il **codice di prodotto continua a non esistere**. Nel repository esiste però codice Swift: il **banco di misura del cancello tecnico n°1**, sotto `Spikes/01-scale-memory/`. È un pacchetto SwiftPM con un manifest (`Package.swift`), la libreria `BenchKit`, gli eseguibili `gen-dataset` e `bench` e la suite `BenchKitTests`.
+
+È il primo codice del repository. È **dichiaratamente usa-e-getta** e non anticipa la struttura di pacchetti prevista dal PRD. Code, cache di anteprime e banda di ritenzione vi esistono nella forma minima che serve a misurarle.
+
+La colonna «Stato nel repository» distingue questo **materiale di misura sotto `Spikes/`** dal codice di prodotto. Una riga cambia solo dove il cancello dimostra l'uso della tecnologia.
 
 | Livello | Tecnologia prescritta | Stato nel repository |
 |---|---|---|
-| Linguaggio | Swift 6.x | assente |
-| Piattaforma | macOS 15+, Apple Silicon | assente |
-| Interfaccia | SwiftUI con ponte AppKit (`NSCollectionView`) per la griglia | assente |
-| Anteprime e immagini | QuickLook Thumbnailing, ImageIO, Core Image | assente |
-| Visione artificiale | Vision (feature print, volti, **landmark**; lo stato aperto/chiuso degli occhi è euristica dell'app, non API), Core ML | assente |
+| Linguaggio | Swift 6.x | presente nel solo materiale di misura: Swift 6.4.2 dei Command Line Tools, modalità di linguaggio Swift 6 a concorrenza stretta. Nessun codice di prodotto |
+| Piattaforma | macOS 15+, Apple Silicon | dichiarata dal banco (`platforms: .macOS(.v15)`), che ha misurato su Apple M1 Pro. Nessun target di prodotto |
+| Interfaccia | SwiftUI con ponte AppKit (`NSCollectionView`) per la griglia | `NSCollectionView` in una finestra AppKit usata come **strumentazione di misura** del banco, non come interfaccia. SwiftUI assente |
+| Anteprime e immagini | QuickLook Thumbnailing, ImageIO, Core Image | QuickLook Thumbnailing e ImageIO usati dal banco come carichi di misura. Prima schermata su 3.000 immagini: p95 441,8 ms con la decodifica ridimensionata ImageIO e 1771,9 ms con Quick Look (`Spikes/01-scale-memory/RESULT.md`). Core Image assente |
+| Visione artificiale | Vision (feature print, volti, **landmark**; lo stato aperto/chiuso degli occhi è euristica dell'app, non API), Core ML | Vision usata dal banco come carico di misura (feature print più landmark dei volti), con un costo mediano da 1,74 a 4,33 MB per elemento. Core ML assente |
 | Osservazione filesystem | File System Events, eventi a granularità di file, identificatore d'evento persistito e legato al volume | assente |
 | Identità dei file | Chiavi di risorsa di Foundation + bookmark persistenti; combinazione da stabilire in Tappa 0 | assente |
 | Coordinamento tra processi | `NSFileCoordinator` per gli accessi concorrenti al sidecar — **cooperativo**, non impositivo | assente |
 | Isolamento di processo | XPC — **non usato nell'MVP**, registrato come innesto previsto per isolare la decodifica di dati non fidati (ADR-016) | assente |
 | Persistenza | SQLite tramite GRDB.swift 7.x, in **due file distinti** con impostazioni di durabilità diverse (cache derivata, stato durevole); sidecar XMP (schema Basic) per i giudizi | assente |
-| Test | Swift Testing, XCUITest, lunga durata su memoria ed eventi, iniezione di arresti sui lotti, corpus di file malformati | assente |
+| Test | Swift Testing, XCUITest, lunga durata su memoria ed eventi, iniezione di arresti sui lotti, corpus di file malformati | Swift Testing presente nella sola suite del banco (`BenchKitTests`). La sessione di memoria di lunga durata esiste come sottocomando del banco, eseguito a mano. Tutto il resto assente |
 
 <!-- archetipo:wiki section=scope -->
 
@@ -63,13 +67,26 @@ Lo stack è **prescritto dal PRD e non ancora presente nel repository**. Nessun 
 
 **Ambito.** Questa mappa copre lo stato corrente del repository e l'intento di prodotto. Poiché l'ispezione non ha rilevato confini fisici né candidati di capacità, non esistono pagine di dominio: nessun dominio è stato creato per non trasformare affermazioni del PRD in osservazioni di codice.
 
-**Stato dell'intento.** Il PRD 1.2 subordina la costruzione completa a quattro **cancelli tecnici** (scala e memoria su 50.000 file; matrice eventi e identità su APFS, volume esterno, cartella sincronizzata e volume di rete; round-trip XMP con strumenti reali; iniezione di arresti su un lotto di operazioni) e dichiara **provvisori** gli ADR-007, 009, 011, 012 e 013 fino al loro esito. Parte dell'intento qui rappresentato è quindi un'ipotesi in attesa di verifica, non una decisione chiusa.
+**Stato dell'intento.** Il PRD 1.2 subordina la costruzione completa a quattro **cancelli tecnici**:
+
+1. scala e memoria su 50.000 file;
+2. matrice eventi e identità su APFS, volume esterno, cartella sincronizzata e volume di rete;
+3. round-trip XMP con strumenti reali;
+4. iniezione di arresti su un lotto di operazioni.
+
+Il PRD dichiara **provvisori** gli ADR-007, 009, 011, 012 e 013 fino all'esito dei cancelli. Il **cancello n°1 ha ora un esito scritto**, in `Spikes/01-scale-memory/RESULT.md`:
+
+- ADR-009 è **emendato** con valori misurati: [Ammissione del lavoro con stime calibrate e banda di ritenzione](/decisions/work-admission-budget.md);
+- NFR-P1 è confermato con il percorso ImageIO;
+- NFR-P9 ed NFR-P10 sono emendati.
+
+Gli altri tre cancelli restano aperti, e con loro gli ADR-007, 011, 012 e 013. La parte dell'intento che ne dipende è ancora un'ipotesi in attesa di verifica, non una decisione chiusa.
 
 **Esclusioni riportate dall'ispezione:** metadati del repository, directory di dipendenze e build, radice della Wiki configurata.
 
 **Aree non ispezionate:** l'inventario Git non era disponibile e l'ispezione ha usato la ricalibrazione da filesystem. Il progetto non è un repository Git al momento della compilazione.
 
-**Nota sull'ancoraggio delle evidenze.** Le pagine core citano la radice del progetto (`.`) come sorgente tracciata perché la loro affermazione centrale — *non esiste ancora codice implementato* — decade nel momento in cui compare codice in qualunque punto dell'albero. Appena esistono directory sorgente reali, l'ancoraggio va restretto a quelle directory.
+**Nota sull'ancoraggio delle evidenze.** Le pagine core citavano la radice del progetto (`.`) come sorgente tracciata perché la loro affermazione centrale era *non esiste ancora codice implementato*, e quell'affermazione sarebbe decaduta alla comparsa di codice in qualunque punto dell'albero. La condizione prevista si è verificata: esiste la directory sorgente reale `Spikes/01-scale-memory`. L'ancoraggio di questa pagina è quindi **ristretto** a quella directory, con ruolo di implementazione, e al PRD, con ruolo di intento. Quando comparirà il codice di prodotto, le sue directory si aggiungeranno come sorgenti.
 
 ## Concetti collegati
 
@@ -77,3 +94,4 @@ Lo stack è **prescritto dal PRD e non ancora presente nel repository**. Nessun 
 - [Mappa del codice](/engineering/code-map.md) — crosswalk fisico, oggi vuoto
 - [Sviluppo e operatività](/operations/development.md) — build, test, distribuzione previsti
 - [PRD di iMAGE Surfer](/references/prd.md) — la fonte dell'intento
+- [Ammissione del lavoro con stime calibrate e banda di ritenzione](/decisions/work-admission-budget.md) — la decisione chiusa dal cancello n°1
