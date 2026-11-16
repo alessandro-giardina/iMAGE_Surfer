@@ -153,6 +153,90 @@ body: |-
   Ogni ID in `update` e `create` ha un task dedicato che ne nomina l'ID canonico. I quattro task di aggiornamento portano `archetipo wiki --project-root /Users/gia/iMAGE_Surfer reset <page-id>` come **primo passo** e pretendono `state: generated` in `archetipo wiki status` fra i criteri di completamento: non si modifica a mano il blocco `review` — si usa `archetipo wiki reset`.
 
   _Piano generato da ARchetipo Planning — 2026-08-26_
+
+
+
+  ---
+
+  ## Rework — revisione del 2026-11-16
+
+  ### Feedback da correggere
+
+  - **`docs/wiki/engineering/code-map.md:56`**: `archetipo wiki validate --profile bootstrap` fallisce con `WIKI_UNCOVERED_BOUNDARY` («inspected boundary is not represented in coverage: Spikes»). Lo corregge TASK-17, e TASK-18 è il nuovo cancello finale.
+
+  ### Causa
+
+  Le cause sono due e si sommano:
+
+  1. **TASK-13 ha letto il contratto di copertura in modo troppo stretto.** Ha ragionato solo sui *candidati di capacità* («nessun elemento di prodotto da rappresentare») e ha concluso che il frontmatter `coverage` dovesse restare assente. Il contratto Wiki (`wiki-contract.md` § *Deterministic coverage*) chiede invece di rappresentare **ogni** elemento restituito da `wiki inspect`, confini compresi. Oggi `inspect` restituisce il confine `Spikes` (`kind: source`, 31 file).
+  2. **Il cancello finale TASK-16 ha usato `archetipo wiki validate` senza profilo.** Quella validazione non controlla la copertura e restituiva `ok: true`. Il difetto è quindi arrivato in revisione senza che nessun controllo lo segnalasse. Il nuovo cancello usa `validate --profile bootstrap`.
+
+  ### Correzione scelta
+
+  Il frontmatter di `engineering/code-map` riceve **una sola** voce `coverage`: `kind: boundary`, `path: Spikes`, `status: excluded`, con una `note` che motiva l'esclusione. Le alternative scartate sono:
+
+  - **`status: mapped`, con `pages: [engineering/code-map]`**: dichiarerebbe il confine mappato su una pagina, e contraddirebbe la sezione *Codice non mappato*, che dice il banco «deliberatamente fuori dalla mappa dei domini».
+  - **`status: partial`**: implicherebbe una mappatura parziale che non esiste.
+  - **`path: Spikes/01-scale-memory`**: il percorso deve coincidere con il confine che `inspect` restituisce, cioè `Spikes`. Un sottopercorso lascerebbe il rilievo aperto.
+
+  Nessuna voce `kind: capability`: `inspect` restituisce `capability_candidates: []`.
+
+  Nella stessa sezione *Copertura*, la frase di riga 58 («inventario Git non disponibile, con ricalibrazione da filesystem») non è più vera: l'ispezione corrente riporta la revisione `c3e7f7d` e, fra le aree non ispezionate, solo `Spikes: representative sample only`. Il revisore chiede che la sezione sia coerente, quindi TASK-17 la riallinea all'output corrente di `inspect`. Il resto della pagina non cambia.
+
+  **Soglia ADR non superata.** È metadato Wiki conforme a un contratto esistente. Non tocca modello dati, sicurezza, integrazioni, topologia o politiche trasversali, quindi non si crea né si aggiorna nessuna pagina `type: decision`.
+
+  ### Baseline del rework
+
+  Misurata sotto `/Users/gia/iMAGE_Surfer` (che è anche `data.workdir`: i worktree sono disabilitati) il 2026-11-16, sulla revisione `c3e7f7d`.
+
+  | Controllo | Risultato prima del rework | Conseguenza sulla pianificazione |
+  |---|---|---|
+  | `archetipo wiki --project-root /Users/gia/iMAGE_Surfer validate --profile bootstrap` | **Rosso:** `ok: false`, 6 pagine, **un solo** rilievo `error`: `WIKI_UNCOVERED_BOUNDARY` su `engineering/code-map`, confine `Spikes` | È il difetto da correggere. Dopo TASK-17 l'attesa è `ok: true` senza rilievi `error`. Qualunque altro rilievo `error` è una regressione. |
+  | `archetipo wiki --project-root /Users/gia/iMAGE_Surfer validate` | **Verde:** `ok: true`, 6 pagine, `findings: null` | Deve restare verde, ma **non basta come cancello**: non controlla la copertura. |
+  | `archetipo wiki --project-root /Users/gia/iMAGE_Surfer status --require-generated engineering/code-map` | **Verde:** stato 0, 6 pagine, tutte `generated` | Il `reset` iniziale di TASK-17 è idempotente, ma resta obbligatorio. Dopo la modifica la pagina deve restare `generated`. |
+  | `archetipo wiki --project-root /Users/gia/iMAGE_Surfer inspect` | Un solo confine, `Spikes` (`source`, 31 file); `capability_candidates: []`; `uninspected: ["Spikes: representative sample only"]`; `excluded`: metadati del repository, directory di dipendenze e build, radice della Wiki configurata | La copertura deve rappresentare esattamente il confine `Spikes`. Se l'inventario cambia prima dell'esecuzione, TASK-17 si ferma e lo riporta. |
+  | `swift build --package-path Spikes/01-scale-memory` | **Verde:** `Build complete!` | Il rework non tocca Swift e la build deve restare verde. |
+  | `swift test --package-path Spikes/01-scale-memory` | **Verde:** 41 test in 7 suite, circa **392 s** (dominati dalla suite di integrazione sul profilo smoke) | Va eseguito con un timeout esplicito di almeno 600 s. Include `ResultTraceabilityTests`, l'oracolo di AC-2…AC-7. |
+  | `swift format lint --strict --recursive Spikes/01-scale-memory/Sources Spikes/01-scale-memory/Tests` | **Verde:** stato 0, nessun rilievo | Deve restare a stato 0. |
+  | `git status --porcelain` | `M .archetipo/specs/US-001.yaml` (feedback di rework), `?? .archetipo/tmp/` (area di staging del piano, rimossa dopo il salvataggio), `?? .vscode/` (impostazioni locali dell'editor, fuori ambito) | Il cancello verifica le modifiche **solo** sotto `Spikes/` e `docs/`, confrontando con `c3e7f7d`. Così non dipende da file di processo o locali. |
+
+  Non ci sono prerequisiti di ambiente nuovi: servono gli stessi strumenti della baseline originale (Swift 6.3.3 dai Command Line Tools e CLI `archetipo`). `xcodebuild` e `swiftlint` restano assenti e non vanno invocati.
+
+  **Diagnostica sui file toccati.** L'unico file modificato a mano è `docs/wiki/engineering/code-map.md`. Il suo solo controllo è la validazione Wiki, e oggi ha esattamente un rilievo `error`, quello da rimuovere. `docs/wiki/index.md` può cambiare solo tramite `archetipo wiki catalog`.
+
+  ### Evidenze di accettazione nel rework
+
+  Il feedback non riguarda nessun file che produce l'evidenza dei criteri di accettazione. Nessun file sotto `Spikes/` cambia, quindi gli oracoli della mappa originale restano validi. Il cancello del rework li riesegue tutti, per dimostrare che restano verdi.
+
+  | Criterio | Oracolo rieseguito | Task |
+  |---|---|---|
+  | AC-1 | `git check-ignore -q` su `.data` e `runs` esce con 0; `git ls-files` stampa `dataset.json`, `PROCEDURE.md` e `RESULT.md` | TASK-18 |
+  | AC-2 | `ResultTraceabilityTests`: ogni `measurements/*.json` riporta lo stesso `host` dichiarato in § *Hardware di misura* | TASK-18 |
+  | AC-3 | `ResultTraceabilityTests`: le quattro misure combaciano con i JSON versionati | TASK-18 |
+  | AC-4 | `ResultTraceabilityTests`: ogni riga delle stime combacia con il `measurementId` che la calibra | TASK-18 |
+  | AC-5 | `ResultTraceabilityTests`: le soglie di entrata e di uscita combaciano con lo spazzolamento | TASK-18 |
+  | AC-6 | `ResultTraceabilityTests`: quattro voci di esito, ciascuna con uno e un solo marcatore | TASK-18 |
+  | AC-7 | `ResultTraceabilityTests`: simmetria delle soglie non supportabili, nessun `host` divergente | TASK-18 |
+  | Feedback `code-map.md:56` | `validate --profile bootstrap` con `ok: true` e nessun rilievo `error`; `status --require-generated engineering/code-map` con stato 0 | TASK-17, verificato da TASK-18 |
+  | Ambito del rework | `git diff --name-only c3e7f7d -- Spikes docs` elenca solo `docs/wiki/engineering/code-map.md` ed eventualmente `docs/wiki/index.md` | TASK-18 |
+
+  ### Strategia di test del rework
+
+  Non si aggiunge nessun test automatico nuovo. L'oracolo del difetto è `archetipo wiki validate --profile bootstrap`, il controllo deterministico che il contratto Wiki stesso definisce. Un test Swift che chiamasse la CLI `archetipo` legherebbe il banco di misura agli strumenti di processo, senza aggiungere evidenza. Il test end-to-end di browser resta escluso: la spec non ha interfaccia utente. Nessun mockup: non c'è nessuna superficie visibile all'utente.
+
+  ### Impatto sulla Wiki del rework
+
+  Il contratto `wiki_impact` dichiarato sopra **non cambia**. `engineering/code-map` è già in `update`, e il rework aggiunge TASK-17, che ne nomina l'ID e parte con `archetipo wiki --project-root /Users/gia/iMAGE_Surfer reset engineering/code-map`. Nessun ID nuovo in `update` o `create`.
+
+  `archetipo wiki affected --file docs/wiki/engineering/code-map.md --file docs/wiki/index.md` ha restituito due candidati. Ecco la motivazione per ciascuno, più una pagina considerata a parte:
+
+  - **`engineering/code-map`**: afferma che il frontmatter `coverage` «resta assente» e che non c'è nulla da rappresentare in copertura. `inspect` restituisce il confine `Spikes`, quindi l'affermazione è falsa. Anche la frase sull'inventario Git non disponibile non corrisponde più all'ispezione. → **update** (già nel contratto; TASK-17).
+  - **`architecture/context-map`**: afferma che il banco è «deliberatamente fuori dalla mappa dei domini» e rimanda alla mappa del codice. La voce `excluded` conferma questa affermazione, e la pagina non parla di copertura né dell'output di `inspect`. → **read**.
+  - **`decisions/work-admission-budget`**: è solo citata nella `note` della voce di copertura come sede della conoscenza durevole. Nessuna sua affermazione cambia. → **read**.
+
+  Nessun'altra pagina parla di copertura, di `inspect` o del profilo `bootstrap`: una ricerca di `coverage`, `copertura` e `bootstrap` in `docs/wiki/` trova solo due occorrenze non pertinenti in `references/prd`.
+
+  _Rework pianificato da ARchetipo Planning — 2026-11-16_
 tasks:
   - id: TASK-01
     title: Pacchetto SwiftPM Spikes/01-scale-memory, esclusione dei dati generati e PROCEDURE.md
@@ -1101,3 +1185,181 @@ tasks:
       ## Blockers
       None.
     ref: TASK-16
+  - id: TASK-17
+    title: Fix Wiki engineering/code-map - copertura del confine Spikes come excluded e sezione Copertura coerente con wiki inspect
+    type: Fix
+    status: DONE
+    dependencies:
+      - TASK-13
+      - TASK-16
+    body: |-
+      ## Objective
+      La pagina `engineering/code-map` rappresenta nel frontmatter `coverage` il confine `Spikes` restituito da `archetipo wiki inspect`, come voce `excluded` con una motivazione. La sezione *Copertura* descrive quella voce e l'output corrente di `inspect`, e `archetipo wiki validate --profile bootstrap` torna `ok: true`, senza rilievi di severità `error`.
+
+      Commento del revisore, ancorato a `docs/wiki/engineering/code-map.md:56`: la validazione `bootstrap` fallisce con `WIKI_UNCOVERED_BOUNDARY` («inspected boundary is not represented in coverage: Spikes»), perché il frontmatter non ha nessuna voce `coverage` e la frase di riga 56 dichiara che la voce resta assente.
+
+      ## Read
+      - `docs/wiki/engineering/code-map.md`:
+        - frontmatter (righe 1–11: `type`, `title`, `description`, `status`, `sources`);
+        - sezione `<!-- archetipo:wiki section=coverage -->` (righe 52–60), in particolare la frase di riga 56 citata dal revisore e il paragrafo di riga 58 («inventario Git non disponibile, con ricalibrazione da filesystem»).
+      - `.claude/skills/archetipo-wiki/references/wiki-contract.md`, sezione *Deterministic coverage*: forma delle voci (`kind`, `path`, `status`, `pages` / `note`). Una voce `excluded` richiede una motivazione.
+      - Output di `archetipo wiki --project-root /Users/gia/iMAGE_Surfer inspect`: `data.boundaries`, `data.capability_candidates`, `data.uninspected`, `data.excluded`.
+      - `docs/wiki/decisions/work-admission-budget.md`: va letto solo per citarne l'ID nella `note`, non va modificato.
+
+      ## Change
+      - `docs/wiki/engineering/code-map.md`:
+        - nel frontmatter, aggiungi la chiave `coverage:` subito dopo il blocco `sources:`, con **una sola** voce: `kind: boundary`, `path: Spikes`, `status: excluded` e una `note`;
+        - nella sezione *Copertura*, riscrivi il primo paragrafo (riga 56) e il secondo (riga 58). Il terzo paragrafo, sull'ancoraggio, resta invariato.
+      - `docs/wiki/index.md`: si modifica solo se lo rigenera `archetipo wiki catalog`, mai a mano.
+      - **Non-obiettivi:**
+        - nessuna modifica a `title`, `description`, `status` e `sources` della pagina;
+        - nessuna voce `kind: capability`, perché `inspect` non restituisce candidati;
+        - nessuna modifica alle sezioni `domain-code`, `shared`, `unmapped` e *Concetti collegati*;
+        - nessuna modifica alle altre pagine Wiki, a `Spikes/` o a `docs/PRD.md`;
+        - non modificare a mano il blocco `review`: usa `archetipo wiki reset`.
+
+      ## Steps
+      1. **Primo passo obbligatorio.** Da `/Users/gia/iMAGE_Surfer` esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer reset engineering/code-map`. La pagina oggi è già `generated` e il comando è idempotente. Va eseguito comunque, perché lo stato può essere cambiato prima dell'esecuzione.
+      2. Esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer inspect` e verifica due cose:
+         - `data.boundaries` contiene **un solo** confine, con `path: Spikes`;
+         - `data.capability_candidates` è vuoto.
+         Se l'output è diverso (un altro confine, oppure un candidato di capacità), fermati e riporta la differenza come blocco: la voce del passo 3 è progettata per questo inventario.
+      3. Nel frontmatter, subito dopo l'ultima riga del blocco `sources:` (`    role: documentation-inventory`) e prima del `---` di chiusura, inserisci esattamente queste righe, con l'indentazione a due spazi delle chiavi esistenti:
+         ```yaml
+         coverage:
+           - kind: boundary
+             path: Spikes
+             status: excluded
+             note: "Banco di misura usa-e-getta dei cancelli tecnici (oggi il solo Spikes/01-scale-memory, cancello n°1), deliberatamente fuori dalla mappa dei domini di prodotto e da non riusare; la conoscenza durevole che ne deriva è in decisions/work-admission-budget."
+         ```
+         Le scelte della voce sono fissate qui:
+         - `path` è `Spikes`, non `Spikes/01-scale-memory`, perché deve coincidere con il confine che restituisce `inspect`;
+         - lo stato è `excluded`, non `mapped` (contraddirebbe la sezione *Codice non mappato*) né `partial` (implicherebbe una mappatura parziale che non esiste);
+         - la `note` è fra virgolette doppie su una sola riga.
+      4. Sostituisci il primo paragrafo della sezione *Copertura* (oggi riga 56, che inizia con «Esistono ora file sorgente» e dichiara che «la sezione `coverage` in frontmatter resta assente») con questo testo:
+         > Esistono file sorgente, ma **nessun confine di capacità di prodotto**. `archetipo wiki inspect` restituisce un solo confine, `Spikes`, e nessun candidato di capacità. Il confine è rappresentato nella voce `coverage` del frontmatter con stato **`excluded`**: contiene il banco di misura usa-e-getta dei cancelli tecnici, oggi il solo `Spikes/01-scale-memory/`, deliberatamente fuori dalla mappa dei domini. La conoscenza durevole che ne deriva è in [Ammissione del lavoro con stime calibrate e banda di ritenzione](/decisions/work-admission-budget.md). Non è registrata nessuna voce di capacità, perché non ce n'è alcuna da rappresentare.
+      5. Sostituisci il secondo paragrafo (oggi riga 58, che inizia con «Aree dichiarate come non ispezionate») con il testo seguente. È costruito su `data.uninspected` e `data.excluded` del passo 2, così come risultano nella baseline:
+         > Aree dichiarate come non ispezionate dallo strumento: `Spikes`, di cui viene letto solo un campione rappresentativo dei file. Esclusioni riportate: metadati del repository, directory di dipendenze e build, radice della Wiki configurata.
+
+         Se al passo 2 questi due array differiscono dalla baseline, scrivi i valori correnti nella stessa forma.
+      6. Lascia invariato il terzo paragrafo della sezione, quello che inizia con «La pagina era ancorata alla radice del progetto».
+      7. Da `/Users/gia/iMAGE_Surfer` esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer catalog`. Se `docs/wiki/index.md` cambia, la modifica deve venire solo da questo comando.
+
+      ## Verify
+      - Esegui da `/Users/gia/iMAGE_Surfer`: `archetipo wiki --project-root /Users/gia/iMAGE_Surfer validate --profile bootstrap`
+      - Attesa: `data.ok: true`, `data.pages: 6`, nessun rilievo di severità `error`. Nella baseline c'era esattamente un rilievo `WIKI_UNCOVERED_BOUNDARY` su `Spikes`, che ora deve essere sparito.
+      - Esegui: `archetipo wiki --project-root /Users/gia/iMAGE_Surfer validate`
+      - Attesa: `data.ok: true`, 6 pagine, come nella baseline.
+      - Esegui: `archetipo wiki --project-root /Users/gia/iMAGE_Surfer status --require-generated engineering/code-map`
+      - Attesa: stato di uscita 0, nessun `E_CONFLICT`, `engineering/code-map` con `state: generated`.
+      - Esegui: `grep -n -e "resta assente" -e "Git non disponibile" docs/wiki/engineering/code-map.md`
+      - Attesa: nessun output (stato 1). Le due affermazioni superate sono state rimosse.
+      - Esegui: `git status --porcelain -- Spikes docs`
+      - Attesa: solo ` M docs/wiki/engineering/code-map.md` e, se il catalogo è cambiato, ` M docs/wiki/index.md`.
+
+      ## Done
+      - [ ] Feedback `docs/wiki/engineering/code-map.md:56`: il frontmatter ha esattamente una voce `coverage` (`kind: boundary`, `path: Spikes`, `status: excluded`) con una `note` non vuota che cita `decisions/work-admission-budget`.
+      - [ ] La sezione *Copertura* non dichiara più assente il frontmatter `coverage`, descrive la voce `excluded` registrata, e il paragrafo sulle aree non ispezionate ed escluse corrisponde all'output corrente di `wiki inspect`.
+      - [ ] `archetipo wiki validate --profile bootstrap` restituisce `ok: true` senza rilievi `error`; `archetipo wiki validate` restituisce `ok: true` su 6 pagine.
+      - [ ] `archetipo wiki status --require-generated engineering/code-map` passa, e la pagina è `generated`.
+      - [ ] AC-1…AC-7: l'evidenza è invariata. Nessun file sotto `Spikes/` né `docs/PRD.md` è stato toccato.
+
+      ## Blockers
+      None.
+    ref: TASK-17
+  - id: TASK-18
+    title: Cancello finale del rework - validazione Wiki bootstrap, regressione completa del banco e verifica dello stato dei task prima della revisione
+    type: Test
+    status: DONE
+    dependencies:
+      - TASK-01
+      - TASK-02
+      - TASK-03
+      - TASK-04
+      - TASK-05
+      - TASK-06
+      - TASK-07
+      - TASK-08
+      - TASK-09
+      - TASK-10
+      - TASK-11
+      - TASK-12
+      - TASK-13
+      - TASK-14
+      - TASK-15
+      - TASK-16
+      - TASK-17
+    body: |-
+      ## Objective
+      Questo cancello dimostra quattro cose prima che la spec torni in revisione:
+      - il feedback di rework è risolto, secondo il controllo che il revisore ha prescritto, cioè `validate --profile bootstrap`;
+      - l'evidenza di AC-1…AC-7 resta verde;
+      - il rework ha toccato solo la Wiki prevista;
+      - nessuno dei 18 task è `TODO`.
+
+      ## Read
+      - Sezione *Rework — revisione del 2026-11-16* del piano, in particolare la *Baseline del rework*: contiene le attese di ogni comando sotto.
+      - `docs/wiki/engineering/code-map.md`: il risultato di TASK-17.
+      - Il corpo di TASK-16, solo come riferimento per i controlli di AC-1…AC-7 che qui vengono rieseguiti.
+
+      ## Change
+      - Nessun file.
+      - **Non-obiettivi:**
+        - nessuna correzione a pagine Wiki, a `RESULT.md` o al codice del banco. Se un controllo fallisce, la correzione appartiene a TASK-17 per la Wiki, oppure al task originale che ha prodotto il difetto, e questo cancello riporta il difetto invece di correggerlo;
+        - `xcodebuild` e `swiftlint` non vanno eseguiti, perché la baseline li ha rilevati assenti;
+        - `swift build` dalla radice non va eseguito: è rosso per costruzione e non riguarda questo lavoro.
+
+      ## Steps
+      1. Esegui i controlli sotto *Verify* **nell'ordine indicato**, tutti da `/Users/gia/iMAGE_Surfer`. L'elenco è completo: non dedurre la suite finale dalle convenzioni del progetto. Per la Wiki usa `validate --profile bootstrap`. La validazione senza profilo **non** basta, perché non controlla la copertura: è il motivo per cui il difetto è arrivato in revisione.
+      2. Esegui `swift test` con un timeout esplicito di **almeno 600 s**: la baseline lo misura in circa 392 s. Non avviarlo in sottofondo.
+      3. Solo dopo che ogni controllo ha dato l'esito atteso, marca **questo** task come `DONE`.
+      4. Poi ricarica la spec con `archetipo spec show US-001`, da `/Users/gia/iMAGE_Surfer`, e verifica che **nessuno** dei 18 task (TASK-01…TASK-18) risulti `TODO`.
+      5. Solo se nessun task è `TODO`, invoca `archetipo spec review US-001` da `/Users/gia/iMAGE_Surfer`.
+
+      L'ordine è vincolante:
+      1. eseguire i controlli;
+      2. marcare questo task `DONE`;
+      3. ricaricare la spec;
+      4. confermare che nessun task è `TODO`;
+      5. solo a quel punto chiedere la revisione.
+
+      ## Verify
+      - Esegui: `archetipo wiki --project-root /Users/gia/iMAGE_Surfer validate --profile bootstrap`
+      - Attesa: `data.ok: true`, `data.pages: 6`, nessun rilievo di severità `error`. In particolare, nessun `WIKI_UNCOVERED_BOUNDARY`.
+      - Esegui: `archetipo wiki --project-root /Users/gia/iMAGE_Surfer validate`
+      - Attesa: `data.ok: true`, 6 pagine.
+      - Esegui: `archetipo wiki --project-root /Users/gia/iMAGE_Surfer status --require-generated engineering/code-map`
+      - Attesa: stato di uscita 0. `data.states` vale `{"generated": 6}`: nessuna pagina `stale`, `attention` o `evidence-changed`, e nessun `issues`.
+      - Esegui: `swift build --package-path Spikes/01-scale-memory`
+      - Attesa: `Build complete!`, nessun errore. Il rework non tocca Swift: una diagnostica nuova è una regressione da riportare.
+      - Esegui, con un timeout di almeno 600 s: `swift test --package-path Spikes/01-scale-memory`
+      - Attesa: `Test run with 41 tests in 7 suites passed`, compresi `ResultTraceabilityTests` (oracolo di AC-2…AC-7) e la suite di integrazione sul profilo smoke.
+      - Esegui: `swift format lint --strict --recursive Spikes/01-scale-memory/Sources Spikes/01-scale-memory/Tests`
+      - Attesa: stato 0, nessun rilievo.
+      - Esegui: `git check-ignore -q Spikes/01-scale-memory/.data && git check-ignore -q Spikes/01-scale-memory/runs && echo "dati esclusi"`
+      - Attesa: stampa `dati esclusi`.
+      - Esegui: `git ls-files Spikes/01-scale-memory/dataset.json Spikes/01-scale-memory/PROCEDURE.md Spikes/01-scale-memory/RESULT.md`
+      - Attesa: vengono stampati tutti e tre i percorsi.
+      - Esegui: `git diff --name-only c3e7f7d -- Spikes docs`
+      - Attesa: solo `docs/wiki/engineering/code-map.md` e, se il catalogo è cambiato, `docs/wiki/index.md`. Il comando confronta con la revisione base del rework, quindi vale sia prima sia dopo un commit.
+      - Esegui: `git ls-files --others --exclude-standard -- Spikes docs`
+      - Attesa: nessun output, cioè nessun file nuovo non tracciato sotto `Spikes/` o `docs/`.
+      - Esegui, dopo aver marcato questo task `DONE`: `archetipo spec show US-001`
+      - Attesa: nessun task con `status: TODO`; TASK-17 e TASK-18 sono `DONE`.
+
+      ## Done
+      - [ ] Feedback `docs/wiki/engineering/code-map.md:56`: `archetipo wiki validate --profile bootstrap` restituisce `ok: true` senza rilievi `error`, e `status --require-generated engineering/code-map` passa con tutte e 6 le pagine `generated`.
+      - [ ] AC-1: `git check-ignore` conferma l'esclusione di `.data` e `runs`, e `git ls-files` conferma che `dataset.json`, `PROCEDURE.md` e `RESULT.md` sono versionati.
+      - [ ] AC-2: `ResultTraceabilityTests` è verde, e ogni `measurements/*.json` riporta lo stesso `host` dichiarato in § *Hardware di misura*.
+      - [ ] AC-3: `ResultTraceabilityTests` è verde, e le quattro misure, con ripetizioni e dispersione, combaciano con i JSON versionati.
+      - [ ] AC-4: `ResultTraceabilityTests` è verde, e ogni riga delle stime combacia con il `measurementId` che la calibra.
+      - [ ] AC-5: `ResultTraceabilityTests` è verde, e le soglie di entrata e di uscita combaciano con lo spazzolamento.
+      - [ ] AC-6: `ResultTraceabilityTests` è verde, con quattro voci di esito, ciascuna con uno e un solo marcatore.
+      - [ ] AC-7: `ResultTraceabilityTests` è verde, con la simmetria delle soglie non supportabili e nessun `host` divergente.
+      - [ ] `swift build` e `swift test` (41 test) sono verdi, `swift format lint --strict` esce con 0, e `xcodebuild` e `swiftlint` non sono stati invocati.
+      - [ ] Ambito: sotto `Spikes/` e `docs/` è cambiata solo la Wiki prevista.
+      - [ ] Ordine rispettato: controlli eseguiti, questo task marcato `DONE`, `archetipo spec show US-001` ricaricata, nessun task `TODO`, e solo allora `archetipo spec review US-001`.
+
+      ## Blockers
+      None.
+    ref: TASK-18

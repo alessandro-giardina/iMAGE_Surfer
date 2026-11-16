@@ -6,9 +6,9 @@ epic:
   title: Tappa 0 - Cancelli tecnici
 priority: HIGH
 points: 5
-status: REVIEW
+status: DONE
 scope: MVP
-body: |-
+body: |
   Come Leonardo, architetto di iMAGE Surfer,
   voglio misurare su hardware dichiarato il comportamento in latenza e in memoria di una cartella da 50.000 immagini, e derivarne le stime di costo e l'ampiezza della banda di ritenzione,
   così che ADR-009 - e con esso NFR-P1, NFR-P9 e NFR-P10 - sia confermato oppure emendato con numeri misurati, prima che venga scritta una riga del pacchetto che ne dipende.
@@ -37,6 +37,12 @@ body: |-
   - `operations/development` - materiale dei cancelli 1 e 2 non versionabile, soglie dichiarate e non misure ottenute
   - `architecture/context-map` - area prevista "Ammissione del lavoro", oggi senza alcuna evidenza
   - `references/prd` - ADR-009, ADR-015, NFR-P1, NFR-P6, NFR-P9, NFR-P10, NFR-P12
+
+  ## Rework Feedback
+
+  <!-- Added by request-changes. archetipo-plan converts each item into a Fix task. -->
+
+  - **docs/wiki/engineering/code-map.md:56** — Blocco Wiki: `archetipo wiki validate --profile bootstrap` fallisce con WIKI_UNCOVERED_BOUNDARY ("inspected boundary is not represented in coverage: Spikes"). `archetipo wiki inspect` restituisce il confine `Spikes` (kind: source), ma il frontmatter di engineering/code-map non ha una voce `coverage` che lo rappresenti, e questa frase della sezione Copertura dichiara che il frontmatter `coverage` resta assente. Correzione: (1) eseguire prima `archetipo wiki --project-root /Users/gia/iMAGE_Surfer reset engineering/code-map`; (2) aggiungere al frontmatter `coverage:` con una voce `kind: boundary`, `path: Spikes`, `status: excluded` e una `note` che motivi l'esclusione (banco di misura usa-e-getta dei cancelli tecnici, deliberatamente fuori dalla mappa dei domini, conoscenza durevole in decisions/work-admission-budget); (3) riscrivere la frase della sezione Copertura perché sia coerente con la voce registrata; (4) rigenerare il catalogo con `archetipo wiki catalog`. Completamento: `archetipo wiki --project-root /Users/gia/iMAGE_Surfer validate --profile bootstrap` restituisce ok: true senza finding di severità error, e `archetipo wiki status --require-generated engineering/code-map` passa. Il cancello finale dell'implementazione deve usare `validate --profile bootstrap`, non la sola validazione semplice, che non controlla la copertura.
 history:
   - status: TODO
     at: "2026-08-26T13:23:00Z"
@@ -46,3 +52,13 @@ history:
     at: "2026-11-13T09:40:04Z"
   - status: REVIEW
     at: "2026-11-14T02:26:53Z"
+  - status: TODO
+    at: "2026-11-16T09:29:19Z"
+  - status: PLANNED
+    at: "2026-11-16T09:41:14Z"
+  - status: IN PROGRESS
+    at: "2026-11-16T09:49:27Z"
+  - status: REVIEW
+    at: "2026-11-16T09:57:22Z"
+  - status: DONE
+    at: "2026-11-16T10:03:57Z"
