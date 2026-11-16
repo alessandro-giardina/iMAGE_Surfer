@@ -2,12 +2,17 @@
 type: operations
 title: Sviluppo e operatività
 description: Build, test, esecuzione e distribuzione previsti per iMAGE Surfer; esiste la sola toolchain SwiftPM del banco di misura del cancello n°1, nessuna toolchain di prodotto
-status: generated
+status: reviewed
 sources:
-  - path: Spikes/01-scale-memory
-    role: implementation
-  - path: docs/PRD.md
-    role: product-intent
+    - path: Spikes/01-scale-memory
+      role: implementation
+    - path: docs/PRD.md
+      role: product-intent
+review:
+    content_hash: sha256:806af40a25a6ba2e379bee61221719a8f25c9b5fdc35031906e698a740d17694
+    evidence_revision: c3e7f7d9925451c8cee411c629402c840b557f5f
+    evidence_hash: sha256:ea314d65f75b67107e022a7b3557f7a0363b6ebb74b3311bd435252ac8531640
+    reviewed_at: "2026-11-16T10:03:25Z"
 ---
 # Sviluppo e operatività
 

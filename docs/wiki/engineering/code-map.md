@@ -2,12 +2,22 @@
 type: code-map
 title: Mappa del codice
 description: Crosswalk fisico da domini a codice; l'unico codice del repository è il banco di misura usa-e-getta del cancello n°1, fuori da ogni dominio di prodotto, quindi la mappa dei domini è vuota
-status: generated
+status: reviewed
 sources:
-  - path: Spikes/01-scale-memory
-    role: implementation
-  - path: docs
-    role: documentation-inventory
+    - path: Spikes/01-scale-memory
+      role: implementation
+    - path: docs
+      role: documentation-inventory
+coverage:
+    - kind: boundary
+      path: Spikes
+      status: excluded
+      note: Banco di misura usa-e-getta dei cancelli tecnici (oggi il solo Spikes/01-scale-memory, cancello n°1), deliberatamente fuori dalla mappa dei domini di prodotto e da non riusare; la conoscenza durevole che ne deriva è in decisions/work-admission-budget.
+review:
+    content_hash: sha256:20c37ff4062878d86135e5bd114abb90e1aff9f722c576c826a0f74a9b687a44
+    evidence_revision: c3e7f7d9925451c8cee411c629402c840b557f5f
+    evidence_hash: sha256:a8a501a1a9825d59967a9574695350e10c3556128ee83e91a05c75e50786de0c
+    reviewed_at: "2026-11-16T10:03:25Z"
 ---
 # Mappa del codice
 
@@ -53,9 +63,9 @@ Il resto del repository è documentazione di prodotto e configurazione di proces
 
 ## Copertura
 
-Esistono ora file sorgente, ma **nessun confine di capacità di prodotto**. L'unico confine fisico è il pacchetto del banco, `Spikes/01-scale-memory/`, che è materiale di misura e non un candidato di capacità. Non c'è quindi alcun elemento di prodotto da rappresentare in copertura, e la sezione `coverage` in frontmatter resta assente anziché popolata con voci inventate.
+Esistono file sorgente, ma **nessun confine di capacità di prodotto**. `archetipo wiki inspect` restituisce un solo confine, `Spikes`, e nessun candidato di capacità. Il confine è rappresentato nella voce `coverage` del frontmatter con stato **`excluded`**: contiene il banco di misura usa-e-getta dei cancelli tecnici, oggi il solo `Spikes/01-scale-memory/`, deliberatamente fuori dalla mappa dei domini. La conoscenza durevole che ne deriva è in [Ammissione del lavoro con stime calibrate e banda di ritenzione](/decisions/work-admission-budget.md). Non è registrata nessuna voce di capacità, perché non ce n'è alcuna da rappresentare.
 
-Aree dichiarate come non ispezionate dallo strumento: inventario Git non disponibile, con ricalibrazione da filesystem. Esclusioni riportate: metadati del repository, directory di dipendenze e build, radice della Wiki configurata.
+Aree dichiarate come non ispezionate dallo strumento: `Spikes`, di cui viene letto solo un campione rappresentativo dei file. Esclusioni riportate: metadati del repository, directory di dipendenze e build, radice della Wiki configurata.
 
 La pagina era ancorata alla radice del progetto perché la sua affermazione centrale era l'assenza di codice. Comparsa la prima directory sorgente reale, l'ancoraggio è ristretto a `Spikes/01-scale-memory`, più `docs` per la documentazione. Le directory del codice di prodotto si aggiungeranno quando esisteranno.
 

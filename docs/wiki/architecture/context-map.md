@@ -2,12 +2,17 @@
 type: context-map
 title: Mappa dei contesti
 description: Confini logici di iMAGE Surfer; nessun contesto è evidenziato da codice di prodotto, le dodici aree previste dal PRD sono registrate come non risolte, ADR-009 è chiuso dal cancello n°1 e quattro ADR restano provvisori
-status: generated
+status: reviewed
 sources:
-  - path: .
-    role: repository-inventory
-  - path: docs/PRD.md
-    role: product-intent
+    - path: .
+      role: repository-inventory
+    - path: docs/PRD.md
+      role: product-intent
+review:
+    content_hash: sha256:f90557d3528c79d5882c1ea6b937a4105ca6c2ad9207f0dc12174e8cb0123e81
+    evidence_revision: c3e7f7d9925451c8cee411c629402c840b557f5f
+    evidence_hash: sha256:32c58789514ce568179732b636bd941db0b8ced2a0a33ab0e95d659268f13bec
+    reviewed_at: "2026-11-16T10:03:25Z"
 ---
 # Mappa dei contesti
 

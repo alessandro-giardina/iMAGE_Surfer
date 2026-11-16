@@ -2,12 +2,17 @@
 type: overview
 title: iMAGE Surfer
 description: Applicazione macOS nativa per browsing, triage e riorganizzazione di immagini in cartelle; stato attuale del repository e ambito della mappa
-status: generated
+status: reviewed
 sources:
-  - path: Spikes/01-scale-memory
-    role: implementation
-  - path: docs/PRD.md
-    role: product-intent
+    - path: Spikes/01-scale-memory
+      role: implementation
+    - path: docs/PRD.md
+      role: product-intent
+review:
+    content_hash: sha256:4b0ca2fb5582f5e402499498dc0689cb9fc6f6a45849da1af899067a9a481b6b
+    evidence_revision: c3e7f7d9925451c8cee411c629402c840b557f5f
+    evidence_hash: sha256:ea314d65f75b67107e022a7b3557f7a0363b6ebb74b3311bd435252ac8531640
+    reviewed_at: "2026-11-16T10:03:25Z"
 ---
 # iMAGE Surfer
 

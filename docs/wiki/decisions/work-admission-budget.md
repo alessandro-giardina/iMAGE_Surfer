@@ -2,15 +2,20 @@
 type: decision
 title: Ammissione del lavoro con stime calibrate e banda di ritenzione
 description: Code specializzate per tipo sotto budget comune, con stime al p95 per cella calibrate dal cancello n°1, riserva fissa per tipo di lavoro, limite per singolo elemento e banda di ritenzione 0,5/1,0 schermate
+status: reviewed
 decision_status: accepted
-status: generated
 sources:
-  - path: Spikes/01-scale-memory/RESULT.md
-    role: verification
-  - path: Spikes/01-scale-memory/measurements/item-cost-20261114T015242Z-d4448e56.json
-    role: verification
-  - path: Spikes/01-scale-memory/Sources/BenchKit/RetentionBand.swift
-    role: implementation
+    - path: Spikes/01-scale-memory/RESULT.md
+      role: verification
+    - path: Spikes/01-scale-memory/measurements/item-cost-20261114T015242Z-d4448e56.json
+      role: verification
+    - path: Spikes/01-scale-memory/Sources/BenchKit/RetentionBand.swift
+      role: implementation
+review:
+    content_hash: sha256:86b01fb477ce3bf58466976ec95e3df9f1bbfe2aa1c0bbe49e3a4f59febce71c
+    evidence_revision: c3e7f7d9925451c8cee411c629402c840b557f5f
+    evidence_hash: sha256:05b01062a40116fbba297be8f695213af7215eb49ca39fbe289a154a9e93a84d
+    reviewed_at: "2026-11-16T10:03:25Z"
 ---
 # Ammissione del lavoro con stime calibrate e banda di ritenzione
 
