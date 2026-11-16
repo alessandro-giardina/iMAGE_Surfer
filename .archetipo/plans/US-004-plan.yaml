@@ -1,0 +1,1995 @@
+schema: archetipo/plan/v2
+spec_code: US-004
+body: |-
+  # US-004: Cancello 4 - stabilire per iniezione di arresti quale dei cinque esiti si raggiunge — Piano di implementazione
+
+  **Generato da:** Team di pianificazione ARchetipo
+  **Data:** 2026-11-16
+
+  ---
+
+  ## Spec
+
+  **Epica:** EP-001 — Tappa 0 - Cancelli tecnici
+  **Priorità:** HIGH | **Punti:** 5 | **Ambito:** MVP
+
+  **Storia utente**
+
+  Come Leonardo, architetto di iMAGE Surfer, voglio interrompere un lotto di operazioni su file in ogni punto enumerato e osservare, dopo il recupero, quale dei cinque esiti dichiarati viene effettivamente raggiunto e se la compensazione riporta lo stato precedente, così che ADR-007 sia confermato oppure emendato, e che i punti di interruzione destinati legittimamente a "bloccato in attesa dell'utente" siano nominati prima di costruire la macchina a stati che li deve gestire.
+
+  **Criteri di accettazione**
+
+  - AC-1 — `Spikes/04-crash-recovery/` con un lotto di prova eseguibile che scrive il log di intenti prima di agire, esegue passi idempotenti registrati uno a uno, e un meccanismo che interrompe il processo a un punto scelto dall'elenco enumerato; fixture del lotto versionate.
+  - AC-2 — `RESULT.md` pubblica una riga per ogni punto di interruzione enumerato, con l'esito raggiunto fra i cinque, il numero di ripetizioni e lo stato osservato di immagine e sidecar dopo il recupero.
+  - AC-3 — per ogni punto in cui è stata tentata una compensazione, `RESULT.md` dichiara se lo stato dopo la compensazione coincide con quello precedente all'avvio e nomina ogni scostamento.
+  - AC-4 — `RESULT.md` nomina i punti che finiscono legittimamente in "bloccato in attesa dell'utente" con la ragione, distingue errore locale ed errore sistemico, e riporta la classificazione adottata per ogni classe di errore provata.
+  - AC-5 — `RESULT.md` riporta, per i casi in cui l'interruzione separa immagine e sidecar, se il recupero rileva la separazione e cosa riferisce.
+  - AC-6 — `RESULT.md` chiude con l'esito su ADR-007, **confermato** oppure **emendato**; se i cinque esiti non reggono, propone l'insieme sostitutivo con la traccia che lo motiva.
+  - AC-7 — un punto dal quale nessuno dei cinque esiti è raggiungibile è registrato come **esito non supportabile** con la traccia, e non viene riclassificato come "bloccato".
+
+  **Fuori ambito.** La macchina a stati `FileOps` del prodotto, la cronologia dei lotti, il comando di annullamento per l'utente e l'integrazione dei test di iniezione di arresti nella pipeline di integrazione continua appartengono alla Tappa 3. Il cancello non prova la rinomina guidata da pattern né lo smistamento per regole, e non tocca gli altri tre cancelli.
+
+  ---
+
+  ## Soluzione tecnica
+
+  Il cancello è uno **spike di verifica**, non una funzione. Il suo prodotto è una matrice di esiti misurati e un esito scritto su ADR-007. Nasce da zero sotto `Spikes/04-crash-recovery/` come pacchetto SwiftPM **isolato e usa-e-getta**. Non ha dipendenze esterne e non dipende da `Spikes/01-scale-memory/`: il blocco del plugin delle macro di Swift Testing viene copiato, non importato.
+
+  **La verità del cancello è il disco, non la macchina.** Ogni affermazione del recupero viene confrontata con un'**istantanea** del volume presa dal banco: posizione, digest e metadati di ogni file. Un esito stampato non basta: deve coincidere con ciò che il disco mostra.
+
+  ### Pacchetto e fixture
+
+  - **Target.** `CrashKit` è la libreria, `crashbench` l'eseguibile con un sottocomando per azione, `CrashKitTests` la suite Swift Testing. Il codice è in modalità Swift 6 ed è **interamente sincrono**: la macchina è sequenziale per natura, e un punto di arresto deterministico non convive con codice `async`.
+  - **Lotto di prova versionato.** `fixtures/folder/` contiene cinque coppie, da `IMG_0001` a `IMG_0005`. Ogni coppia è un JPEG 64×48 più un sidecar XMP minimo con `xmp:Rating`. Le coppie sono generate una volta da `crashbench make-fixtures` e versionate insieme a `fixtures/MANIFEST.json`, che riporta SHA-256 e dimensione di ogni file.
+  - **Le cinque operazioni.** `fixtures/batch.json` copre i tipi di FR-081 e FR-082, una operazione per coppia:
+
+    | Operazione | Tipo | Coppia | Destinazione |
+    |---|---|---|---|
+    | `OP1` | rinomina | `IMG_0001` | `2026-08-24_evento_001` |
+    | `OP2` | spostamento | `IMG_0002` | `selezione/` |
+    | `OP3` | spostamento con rinomina | `IMG_0003` | `selezione/2026-08-24_evento_003` |
+    | `OP4` | copia | `IMG_0004` | `consegna/` |
+    | `OP5` | Cestino | `IMG_0005` | — |
+
+  - **Passi.** Ogni operazione agisce sulla coppia in due passi, prima l'immagine e poi il sidecar: in tutto dieci passi, da `S01` a `S10`.
+  - **Nome del sidecar.** La convenzione `<radice>.xmp` è una scelta della **sola fixture**. La decisione sul nome appartiene al cancello n°3, e nessun esito di questo cancello ne dipende.
+
+  ### Volume di lavoro e log di intenti
+
+  - **Volume di lavoro dedicato, su immagine disco.** Il lotto gira su un volume APFS da 64 MB:
+    - creazione: `diskutil image create blank --format ASIF --size 64m --volumeName CrashBench --fs APFS .data/work.asif`;
+    - montaggio: `diskutil image attach --nobrowse --mountPoint .data/mnt`;
+    - smontaggio: `diskutil eject`.
+
+    Le ragioni sono tre, tutte verificate dalle sonde della baseline:
+    1. il Cestino di quel volume è `.Trashes/502` **sul volume stesso**, quindi il Cestino dell'utente non viene mai toccato;
+    2. è l'unico modo, senza `sudo`, per far **scomparire il volume** e per **esaurirne lo spazio**;
+    3. ogni esecuzione riparte da zero.
+
+    `hdiutil` funziona, ma su macOS 27.2 stampa avvisi di deprecazione e non va usato. **Regola di sicurezza:** il passo `trash` verifica che l'UUID del volume della sorgente sia quello registrato nel piano, e altrimenti si rifiuta di agire.
+  - **Log di intenti JSONL sul volume ospite.** Il log è `.data/state/intent-log.jsonl`. Ogni record occupa una riga, scritta con una sola `write(2)` e seguita da `fcntl(F_FULLFSYNC)` **prima** dell'azione che annuncia.
+    - **Posizione.** Come lo stato durevole del prodotto, il log è separato dalla cartella del lotto: espellere il volume o riempirlo non tocca il registro.
+    - **Lettura.** Il lettore tollera un'**ultima riga troncata**. La riconosce, ne conserva il frammento come evidenza e tronca il file all'ultima riga completa. Una riga corrotta che non sta in coda è invece un errore, mai ignorato.
+    - **Alternativa scartata: SQLite di sistema**, più vicino a `DurableState` di ADR-003. Il cancello verifica la macchina a esiti di ADR-007, non il motore di durabilità di ADR-003. Un JSONL è leggibile dal revisore con `cat` e rende iniettabile in modo deterministico il record troncato.
+
+  ### Macchina a stati e passi idempotenti
+
+  - **Fasi.** La macchina attraversa queste fasi, ciascuna chiusa da un record:
+    1. *piano registrato* — identità del volume, passi con digest e dimensione, cartelle da creare;
+    2. *precondizioni ricontrollate* — se qualcosa è cambiato rispetto al piano il lotto si interrompe **prima di agire**, come prescrive FR-080, e lo registra come `interrotto-prima-di-agire`, che **non** è uno dei cinque esiti;
+    3. *lotto preparato* — creazione di `selezione/` e `consegna/`;
+    4. *passi* — per ciascuno, record d'intento → azione → record di fatto;
+    5. *esito*.
+  - **Esecuzione dei passi.** Ogni passo osserva prima il disco e non agisce se è già fatto.
+
+    | Tipo | Esecuzione | Compensazione |
+    |---|---|---|
+    | rinomina e spostamento | `renamex_np(..., RENAME_EXCL)`, che non sovrascrive mai | `renamex_np` all'indietro |
+    | copia | copia in un temporaneo `.<nome>.partial-<planId>`, poi pubblicazione con `renamex_np(RENAME_EXCL)` | la copia va nel **Cestino**: NFR-A1 vieta eliminazioni dirette |
+    | Cestino | `FileManager.trashItem`, registrando il percorso restituito | `renamex_np` dalla voce del Cestino trovata **per digest** |
+
+  - **Il Cestino si cerca per digest, non per nome.** La sonda ha mostrato che una collisione nel Cestino rinomina l'elemento con un suffisso orario (`a.jpg 11-11-52-954.jpg`).
+  - **Cartelle preparate.** In compensazione, le cartelle create dal lotto si rimuovono con `rmdir` solo se vuote e solo se il record di preparazione dice che le ha create il lotto.
+  - **File temporanei di copia.** Sono artefatti del banco e si rimuovono con `unlink`. È una politica adottata e dichiarata.
+
+  ### Punti di interruzione
+
+  L'elenco ha **61 punti**, derivati dal piano da `crashbench list-points` e non scritti a mano.
+
+  **Esecuzione (37 punti).**
+
+  | Punto | Momento dell'arresto |
+  |---|---|
+  | `X00-plan-torn` | record del piano scritto a metà |
+  | `X01-plan` | dopo il record del piano |
+  | `X02-recheck` | dopo il ricontrollo delle precondizioni |
+  | `X03-prepare` | dopo la preparazione delle cartelle |
+  | `Sxx-a` | intento registrato, azione non eseguita |
+  | `Sxx-m` | solo copie `S07` e `S08`: temporaneo scritto, non pubblicato |
+  | `Sxx-b` | azione eseguita, fatto non registrato |
+  | `Sxx-c` | fatto registrato |
+  | `S05-torn` | record di fatto di `S05` scritto a metà |
+
+  **Compensazione di un lotto completato (22 punti).** Il lotto si conclude `completato`, poi viene annullato come farebbe l'utente secondo FR-083:
+
+  - `Kxx-a` e `Kxx-b` per i passi da `S10` a `S01`, in ordine inverso;
+  - `K00-a` e `K00-b` per la rimozione delle cartelle preparate.
+
+  **Doppio arresto (2 punti).**
+
+  - `D01`: arresto a `S03-b`, poi un secondo arresto durante la ripresa a `S08-b`.
+  - `D02`: arresto a `S03-b`, poi un secondo arresto durante la compensazione a `K02-a`.
+
+  **Iniezione.** Nel punto scelto il processo stampa `ARRESTO <id>` e si uccide con `kill(getpid(), SIGKILL)`: nessuna pulizia e nessun `atexit`. I punti `-torn` scrivono metà della riga, la sincronizzano e poi si uccidono.
+
+  ### Recupero
+
+  Il recupero gira in un **nuovo processo**, in quattro passaggi:
+
+  1. legge il prefisso valido del log;
+  2. verifica l'identità del volume;
+  3. riconosce dal **disco**, non dal log, lo stato di ogni file;
+  4. procede nella direzione stabilita.
+
+  **Direzione.** `--strategy resume|compensate` sceglie la direzione. Una compensazione già avviata e registrata nel log, però, **non viene mai rovesciata in silenzio**: la direzione del log prevale sull'opzione.
+
+  **Log e disco divergono.** Il log dice cosa si voleva fare, il disco cosa è accaduto. Una divergenza fra i due viene riportata, e per decidere vale il disco.
+
+  **Stampa.** Il recupero riporta lo stato di ogni passo, la posizione di immagine e sidecar per coppia, le separazioni trovate all'avvio e la riga `ESITO`.
+
+  **Decisioni dell'utente.** `crashbench decide retry|abandon` registra la decisione su un lotto `bloccato`.
+
+  ### Classificazione degli errori per ambito, non per errno
+
+  La sonda ha mostrato che, dopo l'espulsione del volume, `rename` restituisce `ENOENT`, **lo stesso errno di un file scomparso**, e che il punto di montaggio torna a essere una directory vuota del volume ospite. Il classificatore verifica quindi **nell'ordine** quattro condizioni, e la prima che corrisponde decide:
+
+  1. **Il volume.** Se l'UUID della radice del lotto è diverso da quello del piano, oppure la radice manca, l'errore è sistemico (`G-volume-missing`).
+  2. **La scrittura.** Se la radice o la cartella di destinazione non è scrivibile (`access(W_OK)`), l'errore è sistemico (`G-folder-readonly`).
+  3. **Lo spazio.** Se l'errno è `ENOSPC` o `EDQUOT`, l'errore è sistemico (`G-space-exhausted`).
+  4. **Le cause locali**, riconosciute da ciò che si osserva sul disco:
+     - `L-missing`: il file non è in nessuna posizione attesa;
+     - `L-locked`: `EPERM` con `UF_IMMUTABLE` impostato;
+     - `L-collision`: `EEXIST`, oppure un file estraneo nella posizione di arrivo;
+     - `L-modified`: il digest non è quello del piano;
+     - `L-trash-emptied`: in compensazione, nessuna voce nel Cestino ha il digest atteso.
+
+  Un fallimento che non corrisponde a nessuna classe resta `nonClassificato`, e non viene ricondotto per somiglianza a una classe vicina.
+
+  **La classificazione è l'ingresso del cancello, non la sua conclusione.** `RESULT.md` dice se ha retto.
+
+  ### Perturbazioni
+
+  Le otto classi si applicano **fra l'arresto e il recupero**, con `crashbench perturb <classe>`, e si rimuovono con `crashbench unperturb`.
+
+  - **Dove.** Ogni classe si prova a tre punti:
+    - `X03-prepare`: niente ancora eseguito;
+    - `S06-b`: lotto a metà;
+    - `S10-c`: tutto eseguito.
+  - **Quante celle.** Ogni punto si prova in ripresa e in compensazione: **48 celle**.
+  - **Il bersaglio** è scelto da una regola fissa:
+    - in ripresa, il primo passo non ancora eseguito a cui la classe si applica;
+    - in compensazione, il primo passo eseguito, in ordine inverso.
+  - **Restrizioni** che vengono dalla baseline:
+    - `G-space-exhausted` si applica solo alle copie: su un volume APFS pieno rinomina, `mkdir` e Cestino riescono, la copia fallisce con `ENOSPC`;
+    - `L-locked` si applica solo a rinomina, spostamento e Cestino: una sorgente immutabile si copia lo stesso.
+  - **Celle non applicabili.** Una combinazione senza bersaglio si registra come non applicabile, con il motivo.
+  - **Celle bloccate.** Ogni cella che finisce `bloccato` prosegue con due rami: `unperturb` più `decide retry`, e `decide abandon`.
+
+  ### Classificatore degli esiti
+
+  È una **funzione pura**. Le regole si applicano in ordine e la prima che corrisponde vince:
+
+  1. **Nessun piano completo nel log** → `NON_SUPPORTABILE`, motivo `nessun-esito-applicabile`. Lo stato è riconoscibile: per costruzione nessuna azione è stata eseguita. Ma nessuno dei cinque esiti lo descrive.
+  2. **Almeno un passo non riconoscibile, o un errore non classificato** → `NON_SUPPORTABILE`, motivo `stato-non-riconoscibile`, con la traccia del riconoscitore.
+  3. **L'utente ha deciso di abbandonare** → `abbandonato`.
+  4. **Almeno un errore sistemico non risolto** → `bloccato`.
+  5. **Almeno un passo saltato per errore locale** → `parzialmente-recuperato`.
+  6. **Direzione in avanti e tutti i passi fatti** → `completato`.
+  7. **Direzione di compensazione e tutti i passi riportati all'origine** → `compensato`.
+  8. **Ogni altro caso** → `NON_SUPPORTABILE`, motivo `nessun-esito-applicabile`.
+
+  **`bloccato` nasce solo dalla regola 4.** Nessuna regola riconduce uno stato non riconoscibile a `bloccato` (AC-7).
+
+  ### Matrice e oracoli indipendenti
+
+  `crashbench run-matrix` esegue ogni cella **in processi figli** dello stesso eseguibile, con queste celle:
+
+  - 37 punti di esecuzione per 2 strategie;
+  - 22 punti di compensazione;
+  - 2 punti di doppio arresto;
+  - 48 combinazioni di perturbazione.
+
+  **Ripetizioni.** 5 sul profilo `full`, 1 sul profilo `smoke`.
+
+  **Controllo dell'arresto.** Per ogni esecuzione il banco verifica che il figlio sia morto per segnale 9 nel punto chiesto. Altrimenti la cella è `PUNTO_NON_RAGGIUNTO` e l'esecuzione fallisce.
+
+  **Oracoli calcolati dal banco**, non dalla macchina:
+
+  - **compensazione:** confronto campo per campo con l'istantanea di partenza;
+  - **ripresa:** confronto con lo stato atteso del lotto completato;
+  - **separazione:** confronto fra la separazione osservata nell'istantanea all'arresto e quella riferita dal recupero;
+  - **riconoscimento:** se le posizioni dichiarate dal recupero contraddicono l'istantanea, la cella è marcata `RICONOSCIMENTO_ERRATO`. Questo caso è distinto da `NON_SUPPORTABILE`.
+
+  **Tracciabilità.** Il JSON porta un `measurementId`, l'impronta dell'host e il digest del manifest delle fixture. L'esecuzione scelta è versionata sotto `measurements/`, e ogni riga di `RESULT.md` vi è ricondotta da un test.
+
+  ### Limiti dichiarati, che `RESULT.md` deve riportare
+
+  - **`SIGKILL` simula la caduta del processo, non la perdita di alimentazione.** Ciò che è nella cache delle pagine sopravvive a `SIGKILL`; una perdita di alimentazione o un kernel panic non sono riproducibili senza una macchina virtuale.
+  - **Un solo tipo di volume.** Si usa un volume APFS locale su immagine disco. Le altre classi di volume sono del cancello n°2.
+  - **Il log non è `DurableState`.** Il registro JSONL non prova il contratto di durabilità di ADR-003.
+  - **Campi esclusi dal confronto.** `ctime` e `atime` sono esclusi: `ctime` cambia a ogni rinomina per costruzione.
+  - **Il doppio arresto è coperto dai soli `D01` e `D02`.**
+  - **Un solo lotto di prova**, di 5 operazioni e 10 passi.
+
+  ### Decisioni architetturali
+
+  **Supera la soglia ADR: la semantica di recupero dei lotti di operazioni su file.** È l'oggetto stesso del cancello. Riguarda la semantica di consistenza e di fallimento e una politica tecnica trasversale a ogni operazione massiva prevista: rinomina, smistamento, eliminazione dei duplicati, annullamento.
+
+  `archetipo wiki search --type decision` restituisce la sola `decisions/work-admission-budget`, che non c'entra. Il piano crea quindi `decisions/recoverable-file-batches`.
+
+  - **Contesto.**
+    - Il filesystem non offre transazioni su più file.
+    - ADR-007 è provvisorio fino a questo cancello (ADR-015).
+    - La revisione 1.3 del PRD ha sostituito "ripreso o compensato" con cinque esiti, senza misura.
+  - **Opzione scelta: la decide la misura.** ADR-007 risulterà **confermato** oppure **emendato**, e con lui:
+    - l'insieme degli esiti;
+    - la classificazione di ciascuna classe di errore;
+    - i punti legittimamente bloccati;
+    - le regole di riconoscimento.
+
+    Il piano fissa le domande e la forma della risposta, non la risposta.
+  - **Alternative valutate.**
+    - **(a) Lotto atomico.** Impossibile: nessuna transazione su più file.
+    - **(b) Esito binario "ripreso o compensato" (PRD 1.2).** Già scartato dalla 1.3; il cancello misura esattamente le celle in cui nessuna delle due strade è percorribile.
+    - **(c) Classificazione per errno.** Scartata dalla sonda: `ENOENT` non distingue un file scomparso da un volume scomparso.
+    - **(d) Fidarsi del log per conoscere lo stato.** Scartata: il nome assegnato dal Cestino e il record troncato mostrano che il log registra intenzioni, e la verità è sul disco.
+  - **Conseguenze.** La Tappa 3 erediterà regole già misurate invece di ipotesi:
+    - classificazione per ambito;
+    - Cestino cercato per digest;
+    - direzione di una compensazione avviata mai rovesciata;
+    - gli scostamenti che una compensazione lascia e che vanno dichiarati all'utente.
+  - **Intento di verifica.** `Spikes/04-crash-recovery/RESULT.md`, il JSON sotto `measurements/` e i test che lo tracciano.
+
+  **Non superano la soglia ADR** e restano registrate qui, perché sono materiale del banco, reversibile e senza effetti sul prodotto:
+
+  - il log JSONL al posto di SQLite;
+  - il volume su immagine disco;
+  - l'arresto con `SIGKILL`;
+  - il nome dei file temporanei di copia;
+  - la convenzione del sidecar della fixture.
+
+  ---
+
+  ## Baseline
+
+  Misurata il 2026-11-16 sotto `/Users/gia/iMAGE_Surfer`, sulla revisione `10ec6ad`. È anche `data.workdir`, perché i worktree sono disabilitati. `Spikes/04-crash-recovery/` non esiste ancora.
+
+  | Controllo | Risultato prima dell'implementazione | Conseguenza sulla pianificazione |
+  |---|---|---|
+  | `swift --version` | **Verde:** Apple Swift 6.4.2, target `arm64-apple-macosx27.2.0` | Concorrenza stretta di Swift 6 disponibile. |
+  | `swift format --version` | **Verde:** `6.4.4` | Il controllo di stile del piano è `swift format lint --strict`. |
+  | `swift format lint --strict --recursive Spikes/01-scale-memory/Sources Spikes/01-scale-memory/Tests` | **Verde:** stato 0 | Stesso controllo, a soglia zero, su ogni file Swift creato da questo piano. |
+  | `swift build --package-path Spikes/01-scale-memory` | **Verde:** `Build complete!` (4,1 s) | Questo piano non tocca Spike 01. Il cancello finale verifica che `git diff --name-only 10ec6ad -- Spikes/01-scale-memory` sia vuoto, invece di rieseguire i 41 test di Spike 01, che durano circa 392 s. |
+  | `swift test --package-path Spikes/04-crash-recovery` | **Non eseguibile:** il percorso non esiste | Diventa eseguibile dopo TASK-01. |
+  | `xcodebuild -version` | **Rosso, prerequisito di ambiente:** è attiva solo l'istanza Command Line Tools | È un vincolo, non un difetto: nessun task usa `xcodebuild`, e il banco è SwiftPM. |
+  | `swiftlint` | **Assente** | Nessun task lo invoca. |
+  | `diskutil image create blank --format ASIF --size 64m --volumeName CrashBench --fs APFS <p>.asif` | **Verde, senza `sudo`:** 2,3 s | È il meccanismo del volume di lavoro. |
+  | `diskutil image attach --nobrowse --mountPoint <dir> <p>.asif` e `diskutil eject <dir>` | **Verde:** montaggio in 0,6 s, volume scrivibile, espulsione pulita. Il punto di montaggio resta come directory vuota del volume ospite | Dopo l'espulsione, l'UUID del volume del punto di montaggio diventa quello dell'ospite. Su questo si basa la rilevazione di `G-volume-missing`. |
+  | `hdiutil create/attach/detach` | **Funziona, con avviso di deprecazione** su macOS 27.2 | Non va usato. |
+  | Sonda `FileManager.trashItem` su volume montato | **Verde:** destinazione `<mnt>/.Trashes/502/a.jpg`. Una seconda voce omonima diventa `a.jpg 11-11-52-954.jpg`. Il sistema crea `.Trashes/502/.DS_Store`. `.Trashes` non è elencabile, `.Trashes/502` sì | Tre conseguenze: il Cestino si cerca **per digest**; `.DS_Store` nel Cestino è uno scostamento da riportare; l'istantanea legge `.Trashes/<uid>`. |
+  | Sonda errno | `chflags(UF_IMMUTABLE)` più `rename` → `EPERM` (1). `renamex_np(RENAME_EXCL)` su destinazione esistente → `EEXIST` (17). `rename` in cartella `0555` → `EACCES` (13). `rename` dopo l'espulsione → `ENOENT` (2) | Sono le regole di rilevazione del classificatore. `ENOENT` è ambiguo, da cui la classificazione per ambito. |
+  | Sonda `trashItem` su file con `UF_IMMUTABLE` | **Errore Cocoa, non POSIX:** `NSCocoaErrorDomain` 513, con errore sottostante `NSOSStatusErrorDomain` −5000. Nessun errno | Lo `StepFailure` di un passo `trash` porta l'errore Cocoa, e il classificatore riconosce `L-locked` da `UF_IMMUTABLE` più `EPERM` **oppure** Cocoa 513. Una regola basata sul solo errno non vedrebbe mai il caso del Cestino. |
+  | Sonda volume pieno, riempito fino all'ultimo byte con blocchi dimezzati | `mkdir`, `rename`, `trashItem` e una piccola `write` in append **riescono**. `FileManager.copyItem` e `copyfile(COPYFILE_DATA)` falliscono con `ENOSPC` (28) | `G-space-exhausted` morde solo i passi di copia, da cui l'operazione `OP4` nella fixture. Su volume pieno il registro non fallisce, anche perché sta sull'ospite. |
+  | Sonda `kill(getpid(), SIGKILL)` in un processo figlio | **Verde:** il padre osserva `terminationReason == .uncaughtSignal` e stato 9. Da shell lo stato è 137 | È l'oracolo di "il processo è terminato in quel punto". Le verifiche manuali usano il binario `.build/debug/crashbench` e non `swift run`, che riformula lo stato. |
+  | Sonda `fcntl(F_FULLFSYNC)` | **Verde:** restituisce 0 | Il log di intenti lo usa a ogni record. |
+  | `git check-ignore -v Spikes/04-crash-recovery/.data/x Spikes/04-crash-recovery/runs/x` | **Verde:** `.gitignore:110` (`Spikes/*/.data/`) e `.gitignore:111` (`Spikes/*/runs/`) | **Nessuna modifica a `.gitignore`.** `fixtures/` e `measurements/` non sono esclusi e si versionano. |
+  | `archetipo wiki --project-root /Users/gia/iMAGE_Surfer validate` | **Verde:** `ok: true`, 6 pagine, un solo avviso `WIKI_EVIDENCE_CHANGED` su `architecture/context-map` | I task Wiki devono lasciarla `ok: true`. L'avviso esistente non è un difetto di questo piano. |
+  | `archetipo wiki --project-root /Users/gia/iMAGE_Surfer validate --profile bootstrap` | **Verde:** `ok: true`, nessun rilievo `error`, lo stesso avviso | È il controllo Wiki del cancello finale, quello che verifica la copertura. Lezione del rework di US-001. |
+  | `archetipo wiki --project-root /Users/gia/iMAGE_Surfer status` | `architecture/context-map` è `evidence-changed`. `overview`, `engineering/code-map`, `operations/development` e `decisions/work-admission-budget` sono `reviewed`. `references/prd` è `generated` | Le quattro pagine da aggiornare partono da `reviewed` o `evidence-changed`: `wiki reset` come primo passo è **necessario**, non una formalità. |
+  | `archetipo wiki --project-root /Users/gia/iMAGE_Surfer inspect` | Un solo confine, `Spikes` (`source`, 31 file); `capability_candidates: []` | Il nuovo spike ricade nello stesso confine `Spikes`, già rappresentato come `excluded` in `engineering/code-map`. Cambia solo la nota della voce di copertura. |
+  | `git status --porcelain` | `?? .vscode/` (impostazioni locali, fuori ambito) | Il cancello finale verifica le modifiche solo sotto `Spikes/` e `docs/`. |
+  | `df -h /System/Volumes/Data` | 315 GiB liberi | L'immagine da 64 MB e i dati di esecuzione sono trascurabili. |
+  | `id -u` | `502` | Il Cestino del volume di lavoro è `.Trashes/502`. Il codice usa `getuid()` e non il numero scritto. |
+
+  **Prerequisiti di ambiente, distinti dai difetti di codice.**
+
+  - macOS 15 o successivo su Apple Silicon (presente: macOS 27.2, build 26B123, `MacBookPro18,3`);
+  - toolchain Swift 6 dei Command Line Tools;
+  - `diskutil image`, incluso nel sistema;
+  - `node`, solo per l'assemblatore del piano.
+
+  Non servono `sudo`, rete, variabili d'ambiente o servizi.
+
+  **Diagnostica sui file toccati.** Tutti i file Swift del piano sono nuovi, quindi la soglia è zero diagnostiche di compilatore e zero rilievi di `swift format lint --strict`. Gli avvisi del linker `search path ... not found` con i soli Command Line Tools sono innocui e preesistenti: lo documenta già `operations/development`. Le pagine Wiki modificate devono restare valide con `validate --profile bootstrap`. `docs/wiki/index.md` cambia solo tramite `archetipo wiki catalog`.
+
+  ---
+
+  ## Mappa delle evidenze di accettazione
+
+  L'evidenza finale di questo cancello è in parte un documento. Il rischio è doppio:
+
+  - un documento può *affermare* un esito che nessuna esecuzione ha prodotto;
+  - una macchina può *dichiarare* un esito che il disco smentisce.
+
+  Due oracoli rispondono a questi rischi:
+
+  - la **tracciabilità eseguibile**: ogni riga di `RESULT.md` deve trovare la sua cella nel JSON versionato, in entrambe le direzioni;
+  - l'**istantanea del banco** come verità indipendente dalla macchina sotto test.
+
+  | Criterio | Stato di partenza / fixture | Livello di test | Oracolo osservabile | Task che produce l'evidenza |
+  |---|---|---|---|---|
+  | AC-1 | Repository senza `Spikes/04-crash-recovery/` | Unità e integrazione sul binario reale | <ul><li>`crashbench verify-fixtures` esce con 0 e fallisce se un byte di una fixture cambia.</li><li>`crashbench list-points` stampa 61 punti, derivati dal piano.</li><li>Per i punti campione, `run --crash-at <id>` termina con `uncaughtSignal` 9 osservato dal padre e stampa `ARRESTO <id>`.</li><li>Il log mostra ogni `step-intent` prima della modifica corrispondente sul disco.</li><li>`git check-ignore` esclude `.data` e `runs`, mentre `fixtures/` è versionato.</li></ul> | TASK-01, TASK-03, TASK-05; verificato da TASK-09 e TASK-17 |
+  | AC-2 | Fixture ripristinata su volume dedicato | Integrazione (matrice) e tracciabilità | <ul><li>La tabella § *Punti di interruzione* ha esattamente i 61 ID dell'elenco enumerato.</li><li>Per ogni riga, l'esito con i conteggi, le ripetizioni (5) e le posizioni di immagine e sidecar coincidono con le celle del JSON in `measurements/`.</li><li>Le posizioni del JSON vengono dall'istantanea dopo il recupero.</li><li>Ognuno dei cinque esiti è raggiunto almeno in uno scenario di `RecoveryScenarioTests`, con l'asserzione sull'istantanea e non sulla sola riga stampata.</li></ul> | TASK-06, TASK-08, TASK-10; verificato da TASK-07, TASK-09, TASK-11 |
+  | AC-3 | Istantanea presa prima dell'avvio del lotto | Integrazione (matrice) e tracciabilità | <ul><li>Ogni cella con compensazione tentata ha una riga in § *Compensazione*.</li><li>«Coincide» vale `sì` se e solo se `Snapshot.diff(pre, post)` è vuoto.</li><li>Ogni scostamento del JSON compare nella riga con percorso e campo.</li></ul> | TASK-02, TASK-06, TASK-08, TASK-10; verificato da TASK-07 e TASK-11 |
+  | AC-4 | Perturbazioni applicate fra arresto e recupero | Integrazione (classificatore su errori reali) e tracciabilità | <ul><li>`ErrorClassifierTests` produce ogni classe da un errore reale: `ENOENT` con volume montato dà `L-missing`, `ENOENT` dopo `eject` dà `G-volume-missing`.</li><li>§ *Classi di errore* ha 8 righe con l'ambito uguale a `ErrorClass.scope`.</li><li>Le righe di § *Punti bloccati in attesa dell'utente* coincidono con le celle `bloccato` del JSON, ciascuna con ragione, ambito ed esiti di `retry` e `abandon`.</li></ul> | TASK-04, TASK-08, TASK-10; verificato da TASK-07 e TASK-11 |
+  | AC-5 | Arresti fra il passo dell'immagine e quello del sidecar | Integrazione e tracciabilità | <ul><li>Le separazioni all'arresto sono calcolate **dall'istantanea**, non dal riconoscitore, e confrontate con `SEPARAZIONI-ALL-AVVIO` stampato dal recupero.</li><li>Le righe di § *Separazione di immagine e sidecar* coincidono con le celle che hanno separazioni all'arresto, con «Rilevata» uguale a `separationDetected`.</li><li>Il caso `S03-c` (immagine di OP2 spostata, sidecar no) è verificato sul binario reale.</li></ul> | TASK-06, TASK-08, TASK-10; verificato da TASK-07, TASK-09, TASK-11 |
+  | AC-6 | `RESULT.md` già redatto | Ispezione documentale con controllo eseguibile | <ul><li>§ *Esito su ADR-007* contiene **uno e un solo** marcatore fra `**confermato**` ed `**emendato**`.</li><li>Se emendato, contiene il testo di sostituzione.</li><li>Se il JSON ha celle `nessun-esito-applicabile`, la sezione ne cita almeno una come traccia dell'insieme sostitutivo proposto.</li></ul> | TASK-10; verificato da TASK-11 |
+  | AC-7 | Stati non riconoscibili costruiti, e celle reali della matrice | Unità (classificatore) e tracciabilità | <ul><li>`OutcomeClassifierTests`: uno stato non riconoscibile anche in presenza di un errore sistemico dà `NON_SUPPORTABILE`, mai `bloccato`.</li><li>Le righe di § *Esiti non supportabili* coincidono con le celle `NON_SUPPORTABILE` del JSON, con motivo e traccia.</li><li>Simmetria: nessuna cella `NON_SUPPORTABILE` compare fra i punti bloccati.</li></ul> | TASK-06, TASK-10; verificato da TASK-07 e TASK-11 |
+
+  **Nessun oracolo è nascosto da un test double.** Il banco usa il filesystem reale, il Cestino reale del volume di lavoro, un volume che si smonta davvero e un `SIGKILL` reale. L'unico sostituto è l'iniettore di prova di `RecoveryScenarioTests`, e serve a non uccidere il processo di test:
+
+  - invece del segnale, lancia un errore `SimulatedCrash`;
+  - l'esecutore non ha `defer` né `catch` che scrivano sul log o sul disco, quindi il comportamento osservabile è lo stesso;
+  - l'arresto reale è comunque provato sul binario in TASK-09.
+
+  Il componente responsabile di un criterio non viene mai sostituito.
+
+  ---
+
+  ## Strategia di test
+
+  Il banco è uno strumento di verifica. Uno strumento sbagliato produce esiti plausibili e falsi, che poi chiudono un ADR. La strategia mette quindi sotto test **lo strumento**, e non solo il suo prodotto.
+
+  - **Unità (Swift Testing).**
+    - **Log di intenti:** round trip di ogni tipo di record; record troncato riconosciuto, conservato e riparato; riga corrotta in mezzo che dà errore.
+    - **Istantanea:** un diff per campo da mutazioni note.
+    - **Classificatore degli esiti:** una riga per regola, più i casi di precedenza.
+    - **Elenco dei punti:** 61 ID unici, nell'ordine dichiarato.
+  - **Integrazione sul volume dedicato.** Ogni suite che monta un volume usa una propria directory dati, `.data/tests/<suite>-<UUID>`, ed è `@Suite(.serialized)`. L'espulsione è garantita con `defer`.
+    - **Idempotenza:** ogni passo eseguito o compensato due volte non cambia l'istantanea.
+    - **Classificazione:** ogni classe di errore viene prodotta da un errore reale.
+    - **Esiti:** ognuno dei cinque esiti, più i due motivi di `NON_SUPPORTABILE`, è raggiunto da uno scenario e asserito sull'istantanea.
+  - **Integrazione sul binario reale.** L'arresto per `SIGKILL` è osservato da un processo padre. Il recupero gira in un nuovo processo, e il suo output ha un formato fisso. La matrice `smoke` produce un JSON conforme allo schema, con le ripetizioni richieste e nessuna cella `PUNTO_NON_RAGGIUNTO`.
+  - **Tracciabilità del documento.** `ResultTraceabilityTests` confronta ogni sezione di `RESULT.md` con il JSON versionato, in entrambe le direzioni, inclusa la simmetria di AC-7. Un caso di controllo altera in memoria una riga e pretende che il confronto la rilevi: un oracolo che non può fallire non dimostra niente.
+  - **Ripetibilità dichiarata.** La matrice `full` ripete ogni cella 5 volte. Le ripetizioni discordanti non vengono mediate: la cella è marcata `nonDeterministica` e `RESULT.md` la riporta come tale.
+  - **Durata.** La matrice `full` si esegue a mano in TASK-10. La suite di test usa solo il profilo `smoke`. Ogni comando `swift test` del piano ha un timeout esplicito di almeno 600 s.
+
+  **Nessuna pipeline di integrazione continua.** Portare i test di iniezione di arresti in CI a ogni push è esplicitamente fuori ambito, e appartiene alla Tappa 3.
+
+  ### Rinuncia ai test end-to-end di browser
+
+  **Motivo:** non applicabile per natura. iMAGE Surfer è un'applicazione nativa macOS, e questo cancello non produce alcuna superficie di prodotto: niente rotte, niente browser, niente sessione utente. Nemmeno XCUITest è in gioco: non c'è interfaccia, e `xcodebuild` non è disponibile.
+
+  **Livello di evidenza usato al suo posto:** l'integrazione sul binario reale (TASK-09) e la matrice in processi figli (TASK-08). Ogni AC ha il proprio oracolo in quella catena, e nessuno dipende dall'ispezione visiva.
+
+  **Filmabilità.** Il percorso di `Dimostra` è filmabile come sessione di terminale:
+
+  1. `crashbench run --crash-at <id>`, con il processo che muore (`zsh: killed`);
+  2. `crashbench recover`, con l'esito e le posizioni a schermo;
+  3. l'apertura di `RESULT.md`.
+
+  La configurazione ha `e2e.record_demo_video: false`. La decisione di registrare o saltare spetta ad `archetipo-review`.
+
+  **Nessun mockup:** nessuna superficie visibile all'utente.
+
+  ---
+
+  ## Impatto sulla Wiki
+
+  ```yaml
+  wiki_impact:
+    read: [references/prd]
+    update: [overview, engineering/code-map, operations/development, architecture/context-map]
+    create: [decisions/recoverable-file-batches]
+  ```
+
+  `archetipo wiki affected` è stato eseguito sui percorsi attesi: `Spikes/04-crash-recovery/Package.swift`, `RESULT.md`, `PROCEDURE.md`, `README.md`, `Sources/CrashKit/BatchExecutor.swift`, `Tests/CrashKitTests/ResultTraceabilityTests.swift` e `fixtures/batch.json`. Ha restituito **un solo candidato**, `architecture/context-map`, perché è l'unica pagina che cita `.` fra le sorgenti.
+
+  La domanda applicata a ciascuna pagina non è «il file che ha prodotto la corrispondenza è importante», ma **«questa spec fa qualcosa che questa pagina afferma?»**. Tre pagine non individuate da `affected` fanno affermazioni su *insiemi* di file e di cancelli, e queste affermazioni diventano false. Una riga di motivazione per pagina:
+
+  - **`architecture/context-map`** (candidato di `affected`) — tre affermazioni decadono:
+    - l'area prevista *Operazioni su file* ha evidenza «nessuna», e il cancello n°4 produce la sua politica misurata;
+    - la sezione *Incertezze* e il `description` dicono «quattro ADR restano provvisori», mentre ADR-007 si chiude;
+    - l'area *Stato durevole* va precisata: il cancello ha usato un registro sostitutivo e **non** ne prova il contratto.
+
+    → **update**.
+  - **`overview`** — fa due affermazioni che decadono:
+    - la sezione *Stack* dice «Nel repository esiste però codice Swift: il banco di misura del cancello tecnico n°1», e la riga *Test* dice «iniezione di arresti sui lotti … Tutto il resto assente»;
+    - la sezione *Ambito* dice «Gli altri tre cancelli restano aperti, e con loro gli ADR-007, 011, 012 e 013».
+
+    Questa spec aggiunge un secondo pacchetto Swift e chiude ADR-007. Inoltre la pagina cita fra le sorgenti solo `Spikes/01-scale-memory`. → **update**.
+  - **`engineering/code-map`** — dice «un solo pacchetto Swift: `Spikes/01-scale-memory/`», e la nota della voce di copertura `Spikes` dice «oggi il solo `Spikes/01-scale-memory/`». Sono affermazioni su un insieme di file, rese false dal nuovo pacchetto. La voce `coverage` resta `kind: boundary`, `path: Spikes`, `status: excluded`: cambia solo la nota. → **update**.
+  - **`operations/development`** — quattro affermazioni decadono:
+    - la *toolchain dei cancelli* elenca solo i comandi di Spike 01;
+    - la tabella dei cancelli ha la riga 4 ancora aperta;
+    - «La prima suite reale … è `BenchKitTests`» elenca un solo insieme di test;
+    - «Il materiale dei cancelli 1 e 2 non è versionabile» va completata: il materiale del cancello 4 è versionato.
+
+    La riga dei *test di iniezione di arresti eseguiti a ogni push* resta prescrizione del PRD, e va detto che esiste come banco ma non come CI. → **update**.
+  - **`references/prd`** — la spec **non modifica il PRD**: `RESULT.md` porta l'eventuale testo di sostituzione di ADR-007 senza applicarlo al documento di prodotto. La pagina ha informato la pianificazione (ADR-007, ADR-015, FR-053, FR-077…FR-090, NFR-A2, NFR-A3, NFR-I8), ma nessuna sua affermazione decade. → **read**.
+  - **`decisions/work-admission-budget`** — cita solo sorgenti di Spike 01, e parla di ammissione del lavoro e di memoria, che questa spec non tocca. → nessun impatto.
+  - **`decisions/recoverable-file-batches`** — non esiste. `archetipo wiki search --type decision` restituisce la sola `decisions/work-admission-budget`, quindi non c'è un ID stabile da riusare. La decisione supera la soglia ADR, per i motivi argomentati nella soluzione tecnica. Sarà la sede durevole che la Tappa 3 consulterà al posto di `Spikes/04-crash-recovery/RESULT.md`. → **create**.
+
+  Ogni ID in `update` e `create` ha un task dedicato che ne nomina l'ID canonico: da TASK-12 a TASK-16. I quattro task di aggiornamento hanno come **primo passo** `archetipo wiki --project-root /Users/gia/iMAGE_Surfer reset <page-id>`, e fra i criteri di completamento pretendono `state: generated` in `archetipo wiki status`. Non si modifica a mano il blocco `review`: si usa `archetipo wiki reset`.
+
+  _Piano generato da ARchetipo Planning — 2026-11-16_
+tasks:
+  - id: TASK-01
+    title: Pacchetto SwiftPM Spikes/04-crash-recovery con fixture del lotto versionate e manifest verificabile
+    type: Impl
+    status: DONE
+    body: |-
+      ## Objective
+      Esiste il pacchetto SwiftPM `Spikes/04-crash-recovery/`, costruibile senza dipendenze. Contiene le fixture versionate del lotto di prova: cinque coppie immagine+sidecar, `batch.json` e `MANIFEST.json`. Un controllo eseguibile fallisce se una fixture diverge dal manifest.
+
+      ## Read
+      - `Spikes/01-scale-memory/Package.swift` — `strictSwift6` e il blocco `testingMacroPluginSettings`, cioè il percorso del plugin delle macro di Swift Testing con i soli Command Line Tools. Vanno **copiati** nel nuovo manifest, non importati.
+      - `Spikes/01-scale-memory/Sources/BenchKit/DatasetConfig.swift` — `SpikePaths.packageRoot` risolto da `#filePath`. Usa lo stesso schema per `CrashPaths`.
+      - `Spikes/01-scale-memory/Sources/bench/main.swift` — come Spike 01 smista i sottocomandi su `CommandLine.arguments` senza librerie. Stesso approccio, senza `swift-argument-parser`.
+      - `.gitignore` righe 109-111 — `Spikes/*/.data/` e `Spikes/*/runs/` escludono già i dati generati del nuovo spike.
+
+      ## Change
+      - File nuovi:
+        - sotto `Spikes/04-crash-recovery/`: `Package.swift`, `README.md`;
+        - sorgenti: `Sources/CrashKit/CrashPaths.swift`, `Sources/CrashKit/Fixtures.swift`, `Sources/CrashKit/HostFingerprint.swift`, `Sources/crashbench/main.swift`;
+        - test: `Tests/CrashKitTests/TestSupport.swift`, `Tests/CrashKitTests/FixtureTests.swift`;
+        - fixture: `fixtures/batch.json`, `fixtures/MANIFEST.json`, da `fixtures/folder/IMG_0001.jpg` a `IMG_0005.jpg` e da `fixtures/folder/IMG_0001.xmp` a `IMG_0005.xmp`.
+      - **Non-obiettivi:**
+        - nessuna dipendenza da `Spikes/01-scale-memory`, né come target né come file;
+        - nessuna dipendenza esterna;
+        - nessuna modifica a `.gitignore`, a `docs/` o ad altri spike;
+        - nessun codice `async`.
+
+      ## Steps
+      1. Scrivi `Package.swift`:
+         - `// swift-tools-version:6.0`;
+         - commento d'intestazione: banco del cancello n°4 (US-004), materiale usa-e-getta;
+         - `name: "CrashRecoverySpike"`, `platforms: [.macOS(.v15)]`;
+         - target `CrashKit`, libreria;
+         - target `crashbench`, eseguibile, dipendente da `CrashKit`;
+         - target `CrashKitTests`, test, dipendente da `CrashKit` e `crashbench`, così `swift test` ricostruisce il binario usato dai test di integrazione;
+         - `.swiftLanguageMode(.v6)` su tutti i target; sul target di test anche il blocco `-plugin-path` copiato da Spike 01, attivo solo se il percorso esiste.
+      2. Definisci `public enum CrashPaths` con:
+         - `packageRoot`, risolto da `#filePath` risalendo tre livelli;
+         - `fixtures`, cioè `packageRoot/fixtures`;
+         - `fixtureFolder`, cioè `fixtures/folder`;
+         - `defaultDataDirectory`, cioè `packageRoot/.data`;
+         - `runs`, cioè `packageRoot/runs`;
+         - `measurements`, cioè `packageRoot/measurements`.
+      3. Scrivi `fixtures/batch.json` a mano, con esattamente questo contenuto logico:
+
+         ```json
+         {"batchId": "lotto-di-prova", "root": "lotto",
+          "operations": [
+            {"id": "OP1", "kind": "rename", "stem": "IMG_0001", "to": "2026-08-24_evento_001"},
+            {"id": "OP2", "kind": "move",   "stem": "IMG_0002", "to": "selezione/IMG_0002"},
+            {"id": "OP3", "kind": "move",   "stem": "IMG_0003", "to": "selezione/2026-08-24_evento_003"},
+            {"id": "OP4", "kind": "copy",   "stem": "IMG_0004", "to": "consegna/IMG_0004"},
+            {"id": "OP5", "kind": "trash",  "stem": "IMG_0005"}
+          ]}
+         ```
+
+         Ogni operazione si applica a `<stem>.jpg` e a `<stem>.xmp`. `to` è la radice di destinazione, relativa a `root`.
+      4. In `Fixtures.swift`:
+         - `BatchDefinition: Codable` decodifica `batch.json`.
+         - `makeFixtures(into:force:)` genera cinque JPEG 64×48 con ImageIO, ciascuno di colore pieno diverso: l'indice `i` diventa RGB `(i*40, 255-i*40, 128)`, con qualità 0,8. Genera anche cinque sidecar XMP minimi: un pacchetto `<x:xmpmeta xmlns:x="adobe:ns:meta/">` con `xmp:Rating` uguale all'indice. Infine scrive `MANIFEST.json` nella forma `{"files":[{"path":"folder/IMG_0001.jpg","sha256":"…","size":…}, …]}`, ordinato per percorso, includendo `batch.json`.
+         - `verifyFixtures(at:)` ricalcola SHA-256 (CryptoKit) e dimensione di ogni file del manifest e lancia un errore che nomina il primo file divergente. Lo stesso vale per un file presente in `folder/` ma assente dal manifest.
+      5. `HostFingerprint.current()` raccoglie:
+         - `model`, da `sysctlbyname("hw.model")`;
+         - `osVersion`, da `ProcessInfo.processInfo.operatingSystemVersionString`;
+         - `osBuild`, da `sysctlbyname("kern.osversion")`;
+         - `uid`, da `getuid()`.
+
+         Il tipo è `Codable` e `Equatable`.
+      6. In `Sources/crashbench/main.swift`, dispatcher a sottocomandi:
+         - `make-fixtures [--force]` scrive in `CrashPaths.fixtures` e rifiuta di sovrascrivere senza `--force`;
+         - `verify-fixtures` esce con 0 se le fixture coincidono, con 1 stampando il file divergente;
+         - un sottocomando sconosciuto stampa l'uso ed esce con 2.
+      7. Esegui una volta `swift run --package-path Spikes/04-crash-recovery crashbench make-fixtures` e lascia i 12 file prodotti come file da versionare.
+      8. Scrivi `README.md` con:
+         - lo scopo: cancello n°4, ADR-007;
+         - la tabella dei target;
+         - la nota che la convenzione `<radice>.xmp` è una scelta della sola fixture, perché la decisione appartiene al cancello n°3;
+         - il rimando a `PROCEDURE.md` e `RESULT.md`, che sono prodotti da TASK-10.
+      9. In `TestSupport.swift`, crea per ora un solo helper, `fixtureCopy()`: copia `fixtures/` in una directory temporanea del volume ospite.
+      10. `FixtureTests` verifica che:
+          - `verifyFixtures` passi sulle fixture del repository;
+          - `batch.json` decodifichi in cinque operazioni con i tipi `rename, move, move, copy, trash`, nell'ordine;
+          - ogni `stem` abbia sia `.jpg` sia `.xmp` in `folder/`;
+          - modificando un byte di `IMG_0003.xmp` in una copia, `verifyFixtures` fallisca nominando quel file.
+
+      ## Verify
+      - Esegui `swift build --package-path Spikes/04-crash-recovery`. Attesa: `Build complete!`. Gli avvisi del linker `search path ... not found` sono innocui.
+      - Esegui, con timeout 600 s, `swift test --package-path Spikes/04-crash-recovery --filter FixtureTests`. Attesa: tutti verdi.
+      - Esegui `swift run --package-path Spikes/04-crash-recovery crashbench verify-fixtures; echo "stato $?"`. Attesa: `stato 0`.
+      - Esegui `git ls-files --others --exclude-standard Spikes/04-crash-recovery/fixtures | wc -l`. Attesa: `12`, cioè i file non sono ignorati.
+      - Esegui `swift format lint --strict --recursive Spikes/04-crash-recovery/Package.swift Spikes/04-crash-recovery/Sources Spikes/04-crash-recovery/Tests`. Attesa: stato 0.
+
+      ## Done
+      - [ ] AC-1 — il pacchetto si costruisce senza dipendenze, e le fixture del lotto sono file versionabili e non ignorati: cinque coppie, `batch.json` e `MANIFEST.json`.
+      - [ ] AC-1 — `verify-fixtures` e `FixtureTests` falliscono quando una fixture diverge dal manifest.
+      - [ ] Nessuna diagnostica di compilatore e nessun rilievo di `swift format lint --strict` sui file creati.
+
+      ## Blockers
+      None.
+    ref: TASK-01
+  - id: TASK-02
+    title: Volume di lavoro su immagine disco APFS e istantanea confrontabile campo per campo
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-01
+    body: |-
+      ## Objective
+      Il banco crea, monta e smonta senza privilegi un volume APFS dedicato. Vi ripristina la cartella di prova dalle fixture e cattura un'istantanea della cartella e del Cestino del volume. Il confronto fra due istantanee nomina ogni scostamento per percorso e per campo.
+
+      ## Read
+      - Questo piano, § *Baseline*: le righe `diskutil image` e `FileManager.trashItem` riportano comandi, tempi, posizione `.Trashes/502`, `.DS_Store` nel Cestino e `.Trashes` non elencabile.
+      - `Spikes/04-crash-recovery/Sources/CrashKit/CrashPaths.swift` e `Fixtures.swift`, prodotti da TASK-01.
+
+      ## Change
+      - File nuovi: `Sources/CrashKit/WorkVolume.swift`, `Sources/CrashKit/Snapshot.swift`, `Tests/CrashKitTests/WorkVolumeTests.swift`, `Tests/CrashKitTests/SnapshotTests.swift`.
+      - `Sources/crashbench/main.swift`: aggiungi i sottocomandi `setup`, `teardown`, `reset`, `snapshot` e l'opzione globale `--data-dir <percorso>`.
+      - `Tests/CrashKitTests/TestSupport.swift`: aggiungi l'helper `TestVolume`.
+      - **Non-obiettivi:**
+        - nessun uso di `hdiutil`, deprecato;
+        - nessun uso di `sudo` o di `mdutil`;
+        - nessuna chiamata a `trashItem` in `SnapshotTests`;
+        - nessuna rimozione al di fuori della directory dati o del volume montato.
+
+      ## Steps
+      1. Implementa `WorkVolume(dataDirectory: URL = CrashPaths.defaultDataDirectory)`. Tutto il suo stato sta sotto `dataDirectory`: `work.asif`, `mnt/` e `state/`.
+         - **`ensureImage()`:** se `work.asif` manca, esegue `diskutil image create blank --format ASIF --size 64m --volumeName CrashBench --fs APFS <data>/work.asif`.
+         - **`attach()`:** è idempotente. Se `isMounted` è vero non fa nulla; altrimenti crea `mnt/` ed esegue `diskutil image attach --nobrowse --mountPoint <data>/mnt <data>/work.asif`.
+         - **`eject()`:** se `isMounted` è vero esegue `diskutil eject <data>/mnt`; altrimenti non fa nulla.
+         - **`volumeUUID(of:)`:** restituisce `URLResourceValues.volumeUUIDString` del percorso.
+         - **`isMounted`:** è vero se l'UUID di `mnt` è diverso dall'UUID di `dataDirectory`.
+         - **Percorsi del volume:**
+           - `batchRoot` è `<mnt>/lotto`;
+           - `quarantine` è `<mnt>/.quarantena`: sta sullo stesso volume, così spostare un file in quarantena e riportarlo conserva l'inode;
+           - `trashDirectory` è `<mnt>/.Trashes/<getuid()>`.
+         - **`resetBatchFolder()`:**
+           - fallisce con un errore esplicito se il volume non è montato, senza toccare nulla;
+           - altrimenti rimuove `batchRoot`, il contenuto di `trashDirectory` (se esiste), `quarantine` e `<data>/state/*`;
+           - ricrea `batchRoot` copiando `fixtures/folder/*` con `copyfile(..., COPYFILE_ALL)`, e crea `quarantine` e `state/`.
+         - **Errori di `diskutil`:** un `Process` che esce con stato diverso da 0 produce un errore che include stdout e stderr.
+      2. Implementa `Snapshot.capture(roots: [String: URL])` e la scorciatoia `capture(volume:)`, che equivale a `["lotto": batchRoot, "@cestino": trashDirectory]`.
+         - **Cosa registra.** Per ogni voce, in modo ricorsivo:
+           - percorso relativo prefissato dalla chiave;
+           - tipo (`file` o `directory`);
+           - `size`;
+           - `sha256`, solo per i file;
+           - `mode` (`st_mode`) e `flags` (`st_flags`);
+           - `mtime` e `birthtime` in nanosecondi;
+           - `inode`;
+           - `xattrs`, un dizionario nome → SHA-256 del valore.
+         - **Campi esclusi, con un commento che lo dichiara:** `st_atime` e `st_ctime`. `ctime` cambia a ogni rinomina per costruzione.
+         - **`.DS_Store` non è escluso.** La baseline mostra che il Cestino ne crea uno, ed è uno scostamento da riportare.
+         - La radice di una chiave assente produce zero voci, non un errore.
+      3. Implementa `Snapshot.diff(_ before:, _ after:) -> [Deviation]`.
+         - `Deviation` ha i campi `path`, `field`, `before`, `after`.
+         - `field` è uno fra `aggiunto`, `rimosso`, `size`, `sha256`, `mode`, `flags`, `mtime`, `birthtime`, `inode`, `xattr`.
+         - L'elenco è ordinato per percorso e per campo, ed è vuoto se le istantanee sono uguali.
+         - Aggiungi `Deviation.isDirectoryMtime`, vero per uno scostamento `mtime` su una voce di tipo `directory`.
+      4. Aggiungi i sottocomandi. Tutti accettano `--data-dir`, che vale per default `CrashPaths.defaultDataDirectory`.
+         - `setup` esegue `ensureImage`, `attach` e `resetBatchFolder`, poi stampa il punto di montaggio e l'UUID.
+         - `teardown` esegue `eject`.
+         - `reset` esegue `resetBatchFolder`.
+         - `snapshot --out <file>` scrive il JSON con chiavi ordinate.
+      5. Aggiungi a `TestSupport` l'helper `TestVolume(name:)`. Crea `CrashPaths.defaultDataDirectory/tests/<name>-<UUID>`, poi esegue `ensureImage`, `attach` e `resetBatchFolder`. Espone `close()`, che esegue `eject` e rimuove la directory. Ogni test che lo usa chiama `defer { volume.close() }`.
+      6. Scrivi `WorkVolumeTests`, con `@Suite(.serialized)`. Verifica che:
+         - dopo l'apertura `isMounted` sia vero, e l'UUID di `mnt` sia diverso da quello dell'ospite;
+         - `batchRoot` contenga esattamente i 10 file della fixture, con i digest del manifest;
+         - `trashItem` su `lotto/IMG_0005.jpg` produca un percorso sotto `trashDirectory`;
+         - dopo `eject`, `isMounted` sia falso e `mnt` sia una directory del volume ospite;
+         - `resetBatchFolder` con il volume smontato lanci un errore e non crei `lotto` sull'ospite.
+      7. Scrivi `SnapshotTests`, su una directory temporanea del volume ospite e senza Cestino. Verifica che:
+         - due catture senza modifiche diano un diff vuoto;
+         - una rinomina dia `rimosso` più `aggiunto`, con lo stesso `inode` e lo stesso `sha256`;
+         - `utimensat` sul file dia solo `mtime`;
+         - `chmod` dia solo `mode`;
+         - `setxattr` dia solo `xattr`;
+         - un byte modificato dia `sha256`, `size` o `mtime` sul file, più `mtime` della directory se cambia.
+
+      ## Verify
+      - Esegui `swift build --package-path Spikes/04-crash-recovery`. Attesa: `Build complete!`.
+      - Esegui, con timeout 600 s, `swift test --package-path Spikes/04-crash-recovery --filter "WorkVolumeTests|SnapshotTests"`. Attesa: tutti verdi.
+      - Esegui:
+
+        ```sh
+        B=Spikes/04-crash-recovery/.build/debug/crashbench
+        $B setup && ls Spikes/04-crash-recovery/.data/mnt/lotto | wc -l && $B teardown
+        ```
+
+        Attesa: `10`, e un'espulsione senza errori.
+      - Esegui `mount | grep -c "04-crash-recovery/.data"`. Attesa: `0` dopo `teardown` e dopo i test, cioè nessun volume rimasto montato.
+      - Esegui `swift format lint --strict --recursive Spikes/04-crash-recovery/Sources Spikes/04-crash-recovery/Tests`. Attesa: stato 0.
+
+      ## Done
+      - [ ] AC-1 — il volume di lavoro si ricrea da zero senza privilegi, e la cartella di prova si ripristina a ogni esecuzione dalle fixture versionate.
+      - [ ] AC-3, AC-5 — l'istantanea registra posizione, contenuto e metadati di ogni file della cartella e del Cestino del volume, e il confronto nomina ogni scostamento per campo. `atime` e `ctime` sono esclusi in modo dichiarato.
+      - [ ] Il Cestino dell'utente non viene mai toccato. Nessun test lascia volumi montati.
+
+      ## Blockers
+      None.
+    ref: TASK-02
+  - id: TASK-03
+    title: Piano del lotto, log di intenti JSONL durevole con record troncato riconoscibile, e passi idempotenti con compensazione
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-02
+    body: |-
+      ## Objective
+      Il lotto della fixture si espande in un piano di dieci passi, da `S01` a `S10`. Il log di intenti scrive su disco ogni record prima dell'azione che annuncia, e si rilegge riconoscendo un record troncato. Ogni passo è idempotente sia in esecuzione sia in compensazione.
+
+      ## Read
+      - `Spikes/04-crash-recovery/fixtures/batch.json` e `Sources/CrashKit/Fixtures.swift` (`BatchDefinition`).
+      - `Sources/CrashKit/WorkVolume.swift`: `batchRoot`, `trashDirectory`, `volumeUUID(of:)`.
+      - Questo piano, § *Baseline*: gli errno osservati e il nome con suffisso orario di una collisione nel Cestino.
+
+      ## Change
+      - File nuovi: `Sources/CrashKit/BatchPlan.swift`, `Sources/CrashKit/IntentLog.swift`, `Sources/CrashKit/Steps.swift`, `Tests/CrashKitTests/IntentLogTests.swift`, `Tests/CrashKitTests/StepTests.swift`.
+      - **Non-obiettivi:**
+        - nessuna classificazione degli errori, che è TASK-04: qui un fallimento è un `StepFailure` grezzo;
+        - nessun punto di interruzione, che è TASK-05;
+        - nessun recupero, che è TASK-06;
+        - nessun `try?` che nasconda un errore di sistema.
+
+      ## Steps
+      1. Implementa `BatchPlan.make(definition:volume:)`.
+         - Per ogni operazione, nell'ordine, genera due `PlannedStep`: prima `.jpg`, poi `.xmp`. Sono numerati da `S01` a `S10`.
+         - Ogni passo ha: `id`, `opId`, `kind` (`rename`, `move`, `copy` o `trash`), e `source` e `destination` relativi a `lotto/` (`destination` è `nil` per `trash`). Ha anche `sha256` e `size` della sorgente, letti dal volume.
+         - Il piano ha: `planId` (un UUID), `batchId`, `volumeUUID` di `batchRoot`, `steps`, e `directoriesToCreate`, cioè le cartelle padre delle destinazioni non ancora esistenti (`selezione` e `consegna`). Tutto è `Codable`.
+      2. Implementa `IntentLog(url:)`, con percorso predefinito `<data>/state/intent-log.jsonl`.
+         - **`Record`.** È un enum `Codable` con discriminante `type`. I casi sono:
+
+           | `type` | Campi |
+           |---|---|
+           | `plan` | il piano completo |
+           | `recheck` | `ok`, `divergences: [String]` |
+           | `prepare` | `created: [String]` |
+           | `step-intent` | `stepId`, `direction` (`forward` o `compensate`) |
+           | `step-done` | `stepId`, `direction`, `resultPath`; per `trash` è il `resultingItemURL` relativo al volume |
+           | `step-failed` | `stepId`, `direction`, `syscall`, `errno`, `errorClass` (stringa opzionale, riempita da TASK-04), `scope` (opzionale) |
+           | `recovery` | `strategy`, `direction`, `summary` |
+           | `decision` | `retry` oppure `abandon` |
+           | `outcome` | `outcome`, `reason`, `trace` |
+           | `undo-requested` | nessun campo |
+
+         - **`append(_:)`.** Serializza su una sola riga con `JSONEncoder` e `.sortedKeys`, aggiunge `\n` e scrive con **una sola** `write(2)` su un descrittore aperto con `O_WRONLY|O_CREAT|O_APPEND`. Poi chiama `fcntl(fd, F_FULLFSYNC)`. Una `write` parziale o un sync fallito lanciano un errore.
+         - **`appendTorn(_:)`.** Scrive solo i primi `count/2` byte della riga, senza `\n`, poi chiama `F_FULLFSYNC`. Lo usa TASK-05.
+         - **`read() -> (records: [Record], tornTail: String?)`.** Decodifica le righe terminate da `\n`. Se l'ultimo frammento non termina con `\n` o non si decodifica, lo restituisce come `tornTail`. Una riga terminata e non decodificabile **prima** della coda lancia `logCorrotto(linea:)`.
+         - **`repairTornTail()`.** Se esiste un `tornTail`, ne copia il testo in `<state>/torn-<ISO8601>.txt`, tronca il file all'ultimo `\n` con `ftruncate` e chiama `F_FULLFSYNC`. Restituisce il percorso dell'evidenza. Senza questa riparazione, un `append` successivo fonderebbe il frammento con la riga nuova.
+      3. In `Steps.swift`, definisci `StepFailure`, con i campi `stepId`, `syscall`, `errno: Int32?`, `cocoa: String?` e `path`.
+         - Per `trashItem`: se l'`NSError` (o il suo `NSUnderlyingErrorKey`) è in `NSPOSIXErrorDomain`, `errno` è quel codice. Altrimenti `errno` è `nil` e `cocoa` vale `"<dominio> <codice> / <dominio sottostante> <codice>"`.
+         - La baseline mostra che un file immutabile produce `NSCocoaErrorDomain 513 / NSOSStatusErrorDomain -5000`, senza alcun errno.
+
+         Definisci poi `StepObservation`, con i casi `.notDone`, `.done(resultPath)`, `.partial(tempPath)` e `.anomaly(found: [String: String?])`: posizione → digest trovato, `nil` se assente.
+      4. Implementa `observe(step, plan, volume)`. Il nome del file temporaneo di copia è `.<nome destinazione>.partial-<planId>`, nella cartella di destinazione.
+
+         | Tipo | Stato osservato | Risultato |
+         |---|---|---|
+         | `rename`, `move` | sorgente con il digest del piano e destinazione assente | `.notDone` |
+         | `rename`, `move` | destinazione con il digest e sorgente assente | `.done` |
+         | `rename`, `move` | ogni altra combinazione | `.anomaly`, con entrambe le posizioni |
+         | `copy` | destinazione con il digest | `.done` |
+         | `copy` | destinazione assente e file temporaneo presente | `.partial` |
+         | `copy` | destinazione assente | `.notDone` |
+         | `copy` | ogni altro caso, inclusa una sorgente assente o con digest diverso | `.anomaly` |
+         | `trash` | sorgente presente con il digest | `.notDone` |
+         | `trash` | sorgente assente, e **una sola** voce di `trashDirectory` con il digest | `.done(percorso)` |
+         | `trash` | sorgente assente, e zero o più voci con il digest | `.anomaly`, con l'elenco delle voci |
+
+         Nel Cestino si cerca **per digest**, non per nome.
+      5. Implementa `execute(step, plan, volume)`, idempotente: se `observe` restituisce `.done` non fa nulla.
+         - **`rename` e `move`:** `renamex_np(src, dst, RENAME_EXCL)`.
+         - **`copy`:** in caso di `.partial`, prima `unlink` del temporaneo. Poi `copyfile(src, tmp, nil, COPYFILE_ALL|COPYFILE_EXCL)` e `renamex_np(tmp, dst, RENAME_EXCL)`. Esponi un gancio `afterTempWritten: () -> Void`, chiamato fra le due chiamate: lo usa TASK-05 per `Sxx-m`.
+         - **`trash`:** prima verifica che `volumeUUID(of: src)` sia uguale a `plan.volumeUUID`; se no, `StepFailure` senza agire. Poi `FileManager.trashItem(at:resultingItemURL:)`, e restituisce il percorso risultante relativo al volume.
+         - Ogni chiamata fallita produce un `StepFailure` con `syscall` ed `errno`.
+      6. Implementa `compensate(step, plan, volume)`, idempotente: se `observe` restituisce `.notDone` non fa nulla.
+         - **`rename` e `move`:** `renamex_np(dst, src, RENAME_EXCL)`.
+         - **`copy`:** `trashItem` della copia, senza mai `unlink`, per NFR-A1.
+         - **`trash`:** `renamex_np(<voce trovata per digest>, src, RENAME_EXCL)`.
+         - **`compensatePrepare(created:)`:** `rmdir` delle sole cartelle elencate in `created`. Una cartella non vuota resta dov'è e viene restituita nell'elenco delle cartelle mantenute.
+      7. Scrivi `IntentLogTests`, su una directory temporanea del volume ospite. Verifica che:
+         - il round trip funzioni per ogni tipo di record;
+         - dopo `appendTorn` e `read()`, i record precedenti siano intatti e `tornTail` non sia nullo;
+         - dopo `repairTornTail()`, poi `append`, poi `read()`, ci siano tutti i record completi e nessun `tornTail`, e il file di evidenza contenga il frammento;
+         - una riga corrotta in mezzo al file lanci `logCorrotto`.
+      8. Scrivi `StepTests`, con `@Suite(.serialized)` e `TestVolume`.
+         - Per ciascun tipo di passo verifica:
+           - che `execute` ripetuto due volte agisca solo la prima volta, con le istantanee prima e dopo il secondo `execute` uguali;
+           - che lo stesso valga per `compensate`;
+           - che `execute` seguito da `compensate` riporti percorsi e digest dei file del passo a quelli di partenza.
+         - Verifica inoltre questi casi particolari:
+           - **copia interrotta:** con un temporaneo `.partial` creato a mano, `execute` completa la copia e il temporaneo sparisce;
+           - **collisione nel Cestino:** con una voce `IMG_0005.jpg` di contenuto diverso già nel Cestino, `observe` dopo `trash` trova la voce giusta per digest;
+           - **Cestino fuori volume:** un passo `trash` la cui sorgente sta su un volume diverso da `plan.volumeUUID` (un file nella directory temporanea dell'ospite, con un piano costruito a mano) produce uno `StepFailure` e il file resta dov'è.
+
+      ## Verify
+      - Esegui `swift build --package-path Spikes/04-crash-recovery`. Attesa: `Build complete!`.
+      - Esegui, con timeout 600 s, `swift test --package-path Spikes/04-crash-recovery --filter "IntentLogTests|StepTests"`. Attesa: tutti verdi.
+      - Esegui `grep -rn "trashItem" Spikes/04-crash-recovery/Sources`. Attesa: occorrenze solo in `Steps.swift`.
+      - Esegui `swift format lint --strict --recursive Spikes/04-crash-recovery/Sources Spikes/04-crash-recovery/Tests`. Attesa: stato 0.
+
+      ## Done
+      - [ ] AC-1 — il log di intenti scrive su disco il piano e ogni intento **prima** dell'azione corrispondente, con una riga per record, una sola `write` e `F_FULLFSYNC`. I passi sono registrati uno a uno.
+      - [ ] AC-1 — ogni passo è idempotente in esecuzione e in compensazione, come dimostra `StepTests`.
+      - [ ] AC-7 — un record troncato viene riconosciuto e conservato come evidenza, e non viene mai letto come record valido.
+
+      ## Blockers
+      None.
+    ref: TASK-03
+  - id: TASK-04
+    title: Classificazione degli errori per ambito della precondizione e le otto perturbazioni applicabili e reversibili
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-03
+    body: |-
+      ## Objective
+      Ogni fallimento o anomalia di un passo riceve una delle otto classi di errore del cancello, con ambito **locale** o **sistemico**. L'ambito si decide verificando volume, scrittura e spazio prima dell'errno. Le otto classi si applicano a un bersaglio scelto da una regola fissa e si rimuovono con un comando.
+
+      ## Read
+      - `Sources/CrashKit/Steps.swift`: `StepFailure`, `StepObservation.anomaly`.
+      - `Sources/CrashKit/WorkVolume.swift`: `eject`, `attach`, `quarantine`, `trashDirectory`.
+      - Questo piano, § *Classificazione degli errori per ambito, non per errno* e § *Perturbazioni*.
+      - Questo piano, § *Baseline*: `ENOENT` dopo l'espulsione, il comportamento su volume pieno e l'algoritmo di riempimento a blocchi dimezzati.
+
+      ## Change
+      - File nuovi: `Sources/CrashKit/ErrorClassifier.swift`, `Sources/CrashKit/Perturbations.swift`, `Tests/CrashKitTests/ErrorClassifierTests.swift`.
+      - `Sources/crashbench/main.swift`: aggiungi i sottocomandi `perturb` e `unperturb`.
+      - **Non-obiettivi:**
+        - nessuna modifica alle regole degli esiti;
+        - nessun ricorso a errno «simili» per classificare: un caso senza regola resta `nonClassificato`.
+
+      ## Steps
+      1. Definisci `enum ErrorClass: String, Codable, CaseIterable` con questi otto casi. `scope` ha i valori `.locale` e `.sistemico`.
+
+         | Classe | `scope` adottato | Rilevazione |
+         |---|---|---|
+         | `G-volume-missing` | sistemico | `batchRoot` assente, oppure `volumeUUID(of: batchRoot)` diverso da `plan.volumeUUID` |
+         | `G-folder-readonly` | sistemico | `access(W_OK)` fallisce su `batchRoot` o sulla cartella di destinazione del passo |
+         | `G-space-exhausted` | sistemico | errno `ENOSPC` o `EDQUOT` |
+         | `L-locked` | locale | `UF_IMMUTABLE` presente in `st_flags` del file del passo, **e** errno `EPERM` oppure `cocoa` che comincia con `NSCocoaErrorDomain 513` (caso di `trashItem`, vedi baseline) |
+         | `L-collision` | locale | errno `EEXIST`, oppure un'anomalia con un file di digest diverso nella posizione di arrivo e la sorgente intatta |
+         | `L-modified` | locale | un'anomalia con un file nella posizione attesa ma con digest diverso da quello del piano |
+         | `L-trash-emptied` | locale | in compensazione di un `trash` già eseguito, nessuna voce di `trashDirectory` ha il digest |
+         | `L-missing` | locale | il file non è in nessuna delle posizioni attese: origine, destinazione, Cestino |
+
+      2. Implementa `ErrorClassifier.classify(failure: StepFailure?, observation: StepObservation?, step:, plan:, volume:, direction:) -> Classification`.
+         - `Classification` vale `.classified(ErrorClass)` oppure `.nonClassificato(descrizione)`.
+         - Applica i controlli **in quest'ordine**, e il primo che corrisponde vince:
+           1. volume;
+           2. scrittura;
+           3. errno di spazio;
+           4. cause locali, nell'ordine della tabella.
+         - Commenta in testa al file perché l'ordine conta: `ENOENT` dopo un'espulsione è identico a `ENOENT` di un file scomparso.
+      3. Implementa `Perturbations` con `apply(_ class:, strategy:, plan:, log:, volume:) -> PerturbationRecord` e `remove(volume:)`.
+         - Lo stato si salva in `<data>/state/perturbation.json`, così `unperturb` sa cosa annullare e funziona anche da un altro processo.
+         - Ogni classe si applica e si rimuove così:
+
+           | Classe | Applicazione | Rimozione |
+           |---|---|---|
+           | `L-missing` | `rename` del file bersaglio in `quarantine` | `rename` di ritorno |
+           | `L-locked` | `chflags(UF_IMMUTABLE)` sul bersaglio | `chflags(0)` |
+           | `L-collision` | crea un file estraneo con contenuto `"estraneo"` nella posizione di arrivo del bersaglio: la destinazione in ripresa, l'origine in compensazione | `rename` del file estraneo in `quarantine` |
+           | `L-modified` | salva in `perturbation.json` la dimensione e la `mtime` originali, poi aggiunge un byte in coda | `ftruncate` alla dimensione originale e `utimensat` alla `mtime` originale; l'inode resta lo stesso |
+           | `L-trash-emptied` | `rename` della voce del Cestino con il digest del bersaglio in `quarantine`, salvandone il nome | `rename` di ritorno con lo stesso nome |
+           | `G-volume-missing` | `volume.eject()` | `volume.attach()` |
+           | `G-folder-readonly` | `chmod 0555` su `batchRoot` e sulle cartelle di destinazione esistenti | `chmod 0755` |
+           | `G-space-exhausted` | crea `<mnt>/.riempimento` e scrive blocchi da 1 MiB; a ogni errore dimezza il blocco, fino a 1 byte; poi `fsync` | `unlink` di `.riempimento` |
+
+      4. Implementa la regola del bersaglio, `Perturbations.target(class, strategy, plan, log, volume)`.
+         - Usa lo stato osservato dei passi, cioè `observe`.
+         - **In ripresa:** il primo passo **non eseguito**, in ordine di piano, a cui la classe si applica.
+         - **In compensazione:** il primo passo **eseguito**, in ordine inverso.
+         - **Restrizioni per classe:**
+           - `G-space-exhausted` si applica solo ai passi `copy` in ripresa;
+           - `L-locked` si applica solo a `rename`, `move` e `trash`;
+           - `L-trash-emptied` si applica solo alla compensazione di un `trash` eseguito;
+           - `G-volume-missing` e `G-folder-readonly` non hanno un file bersaglio.
+         - Senza un bersaglio la regola restituisce `.nonApplicabile(motivo)`, e non applica nulla.
+      5. Aggiungi i sottocomandi.
+         - `crashbench perturb <classe> --strategy resume|compensate` legge piano e log, sceglie il bersaglio, applica la perturbazione e stampa una sola riga:
+           - `PERTURBAZIONE <classe> bersaglio=<stepId>|nessuno ambito=<locale|sistemico>`, oppure
+           - `PERTURBAZIONE <classe> NON-APPLICABILE motivo=<…>`.
+         - `crashbench unperturb` è idempotente.
+      6. Scrivi `ErrorClassifierTests`, con `@Suite(.serialized)` e `TestVolume`. Per ogni classe:
+         1. reimposta la cartella;
+         2. crea il piano;
+         3. esegui i passi necessari a portare il lotto nello stato richiesto;
+         4. applica la perturbazione;
+         5. tenta il passo;
+         6. classifica;
+         7. verifica la classe e l'ambito attesi.
+
+         Casi da coprire esplicitamente:
+         - **`ENOENT` con il volume montato** e il file in quarantena → `L-missing`, locale.
+         - **`ENOENT` dopo `eject`** → `G-volume-missing`, sistemico. Questo test è l'evidenza che l'errno da solo non basta.
+         - **Volume pieno.** `G-space-exhausted` sul passo `S07` (copia) produce `ENOSPC`, sistemico. Sullo stesso volume pieno, `S01` (rinomina) riesce.
+         - **Cestino svuotato.** `L-trash-emptied` sulla compensazione di `S09` dopo l'esecuzione di `S09` è locale.
+         - **Rimozione delle perturbazioni.** Per ogni classe, `remove` riporta il volume a un'istantanea uguale a quella presa prima di `apply`. Sono ammessi solo scostamenti con `isDirectoryMtime`.
+
+      ## Verify
+      - Esegui `swift build --package-path Spikes/04-crash-recovery`. Attesa: `Build complete!`.
+      - Esegui, con timeout 600 s, `swift test --package-path Spikes/04-crash-recovery --filter ErrorClassifierTests`. Attesa: tutti verdi.
+      - Esegui `mount | grep -c "04-crash-recovery/.data"`. Attesa: `0` dopo i test.
+      - Esegui `swift format lint --strict --recursive Spikes/04-crash-recovery/Sources Spikes/04-crash-recovery/Tests`. Attesa: stato 0.
+
+      ## Done
+      - [ ] AC-4 — ognuna delle otto classi di errore ha nel codice un ambito adottato, locale o sistemico, e una regola di rilevazione verificata su un errore reale.
+      - [ ] AC-4 — la scomparsa del volume è distinta dalla scomparsa di un file nonostante lo stesso `ENOENT`, e un test lo dimostra.
+      - [ ] Ogni perturbazione è reversibile. `unperturb` riporta il volume allo stato precedente, salvo la `mtime` delle directory.
+
+      ## Blockers
+      None.
+    ref: TASK-04
+  - id: TASK-05
+    title: Macchina a stati del lotto, classificatore degli esiti ed elenco enumerato dei 61 punti di interruzione con arresto per SIGKILL
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-04
+    body: |-
+      ## Objective
+      `crashbench list-points` stampa i 61 punti di interruzione derivati dal piano. `crashbench run --crash-at <id>` esegue il lotto attraverso la macchina a stati e termina il processo con `SIGKILL` esattamente nel punto scelto. Senza `--crash-at` il lotto si chiude `completato`. Gli esiti sono decisi da un classificatore puro.
+
+      ## Read
+      - `Sources/CrashKit/BatchPlan.swift`, `IntentLog.swift`, `Steps.swift` (gancio `afterTempWritten`) e `ErrorClassifier.swift`.
+      - Questo piano, § *Punti di interruzione*, § *Macchina a stati e passi idempotenti* e § *Classificatore degli esiti*.
+
+      ## Change
+      - File nuovi: `Sources/CrashKit/CrashPoints.swift`, `Sources/CrashKit/OutcomeClassifier.swift`, `Sources/CrashKit/BatchExecutor.swift`, `Tests/CrashKitTests/CrashPointsTests.swift`, `Tests/CrashKitTests/BatchExecutorTests.swift`.
+      - `Sources/crashbench/main.swift`: aggiungi i sottocomandi `list-points` e `run`.
+      - **Non-obiettivi:**
+        - nessun recupero, che è TASK-06;
+        - nessun `defer`, `catch` o `atexit` nell'esecutore che scriva sul log o sul disco: un arresto deve lasciare esattamente lo stato raggiunto.
+
+      ## Steps
+      1. Definisci `CrashPoint: Codable`, con i campi `id`, `phase` (`esecuzione`, `compensazione` o `doppio`) e `description`.
+         - `CrashPoints.enumerate(plan)` ricava i punti dal piano, senza ID scritti a mano, in quest'ordine:
+           1. `X00-plan-torn`, `X01-plan`, `X02-recheck`, `X03-prepare`;
+           2. per ogni passo da `S01` a `S10`: `Sxx-a`, poi `Sxx-m` (solo se il passo è `copy`), poi `Sxx-b` e `Sxx-c`;
+           3. `S05-torn`;
+           4. per i passi da `S10` a `S01`, in ordine inverso: `Kxx-a` e `Kxx-b`; poi `K00-a` e `K00-b`;
+           5. `D01` e `D02`.
+         - Con la fixture il totale è 4 + 32 + 1 + 22 + 2 = **61**.
+         - Esponi `CrashPoints.composite`, che descrive i doppi arresti:
+           - `D01`: primo arresto a `S03-b`, secondo durante il recupero con strategia `resume` a `S08-b`;
+           - `D02`: primo arresto a `S03-b`, secondo durante il recupero con strategia `compensate` a `K02-a`.
+      2. Implementa `CrashInjector(target: String?, mode: .kill | .throwForTest, observer: ((String) -> Void)?)`.
+         - `hit(_ id:)` chiama prima l'`observer`, se presente.
+         - Se `id == target`:
+           - in modalità `.kill` stampa `ARRESTO <id>: <descrizione>`, chiama `fflush(stdout)` e poi `kill(getpid(), SIGKILL)`;
+           - in modalità `.throwForTest` lancia `SimulatedCrash(id)`.
+         - Esponi `hitTorn(_ id:)`, che restituisce `true` se il punto chiesto è `X00-plan-torn` o `S05-torn` e coincide con `target`.
+      3. Implementa `OutcomeClassifier.classify(_ input: OutcomeInput) -> Outcome`, una funzione pura.
+         - `OutcomeInput` ha i campi `hasPlan`, `stepStates`, `direction`, `unresolvedSystemic: [ErrorClass]`, `localSkips: [ErrorClass]`, `unrecognized: [String]`, `unclassified: [String]` e `decision`.
+           - `stepStates` è un dizionario `stepId` → stato. Lo stato vale `fatto`, `non-fatto`, `saltato(classe)`, `sospeso(classe)` oppure `non-riconoscibile(traccia)`.
+           - `direction` vale `forward` oppure `compensate`.
+           - `decision` vale `none`, `retry` oppure `abandon`.
+         - `Outcome` ha i campi `kind` e `reason`, più `trace: [String]`. `kind` vale `completato`, `compensato`, `parzialmente-recuperato`, `bloccato`, `abbandonato` oppure `NON_SUPPORTABILE`. `reason` vale `stato-non-riconoscibile` oppure `nessun-esito-applicabile` quando `kind` è `NON_SUPPORTABILE`.
+         - Le regole si applicano in ordine, e la prima che corrisponde vince:
+           1. `!hasPlan` oppure zero passi → `NON_SUPPORTABILE`, motivo `nessun-esito-applicabile`, traccia `"log senza piano completo: per costruzione del log di intenti nessuna azione è stata eseguita"`.
+           2. `unrecognized` oppure `unclassified` non vuoti → `NON_SUPPORTABILE`, motivo `stato-non-riconoscibile`, con quelle tracce.
+           3. `decision == abandon` → `abbandonato`.
+           4. `unresolvedSystemic` non vuoto → `bloccato`.
+           5. `localSkips` non vuoto → `parzialmente-recuperato`.
+           6. direzione `forward` e ogni passo `fatto` → `completato`.
+           7. direzione `compensate` e ogni passo `non-fatto` → `compensato`.
+           8. ogni altro caso → `NON_SUPPORTABILE`, motivo `nessun-esito-applicabile`, con lo stato dei passi come traccia.
+         - Scrivi un commento sopra la funzione: `bloccato` nasce **solo** dalla regola 4, e nessuna regola riconduce uno stato non riconoscibile a `bloccato` (AC-7).
+      4. Implementa `BatchExecutor.run(plan, volume, log, injector, undoAfter: Bool)`.
+         1. **Piano.** Se `hitTorn("X00-plan-torn")`, chiama `appendTorn(.plan)` e poi `hit`. Altrimenti `append(.plan)`, poi `hit("X01-plan")`.
+         2. **Ricontrollo.** Ogni passo deve risultare `.notDone` a `observe`, e `batchRoot` e le cartelle di destinazione esistenti devono essere scrivibili.
+            - Se qualcosa diverge: `append(.recheck(ok: false, divergences))`, poi `append(.outcome("interrotto-prima-di-agire", …))`, e l'esecuzione termina senza toccare il disco. È FR-080, e **non** è uno dei cinque esiti.
+            - Altrimenti: `append(.recheck(ok: true))`, poi `hit("X02-recheck")`.
+         3. **Preparazione.** Crea le cartelle di `directoriesToCreate` assenti, poi `append(.prepare(created))` e `hit("X03-prepare")`.
+         4. **Passi.** Per ogni passo, in ordine:
+            1. `append(.stepIntent(id, .forward))`, poi `hit("Sxx-a")`;
+            2. `execute`, con `afterTempWritten: { hit("Sxx-m") }` per i passi `copy`;
+            3. `hit("Sxx-b")`;
+            4. `append(.stepDone)`; per `S05`, se `hitTorn("S05-torn")`, usa invece `appendTorn` seguito da `hit`;
+            5. `hit("Sxx-c")`.
+
+            Se `execute` produce uno `StepFailure`, lo passa a `ErrorClassifier`:
+            - un errore **locale** diventa `append(.stepFailed(…, classe, locale))`, e l'esecuzione prosegue;
+            - un errore **sistemico** diventa `append(.stepFailed(…, sistemico))`, poi `append(.outcome(bloccato))`, e l'esecuzione si ferma: è la sospensione di FR-079;
+            - un errore `nonClassificato` diventa `append(.stepFailed)`, poi `append(.outcome(NON_SUPPORTABILE))`, e l'esecuzione si ferma.
+         5. **Esito.** `append(.outcome(OutcomeClassifier.classify(…)))`.
+         6. **Annullamento, con `undoAfter`.** È l'annullamento dell'utente di FR-083. Solo se l'esito è `completato`:
+            1. `append(.undoRequested)`;
+            2. per ogni passo da `S10` a `S01`: `append(.stepIntent(id, .compensate))`, poi `hit("Kxx-a")`, poi `compensate`, poi `hit("Kxx-b")`, poi `append(.stepDone(id, .compensate))`;
+            3. `hit("K00-a")`, poi `compensatePrepare`, poi `hit("K00-b")`;
+            4. `append(.outcome(compensato))`.
+      5. Aggiungi il sottocomando `list-points [--json]`: una riga per punto, nella forma `id<TAB>fase<TAB>descrizione`.
+      6. Aggiungi il sottocomando `run [--crash-at <id>] [--data-dir <p>]`.
+         1. Esige un volume montato; altrimenti stampa un errore che chiede `setup` ed esce con 2.
+         2. Esegue `resetBatchFolder()` e salva `<data>/state/pre-snapshot.json`.
+         3. Costruisce il piano.
+         4. Per un punto `K*` attiva `undoAfter`.
+         5. Per `D01` e `D02` usa come bersaglio il primo arresto (`S03-b`) e scrive `<data>/state/pending-second-crash.json` con il secondo punto e la strategia; il recupero di TASK-06 lo leggerà.
+         6. Un ID sconosciuto produce l'elenco dei punti ed esce con 2.
+         7. Alla fine stampa `ESITO <kind>`.
+      7. Scrivi `CrashPointsTests`. Verifica che:
+         - ci siano 61 punti, tutti con ID unico, nell'ordine dichiarato;
+         - `Sxx-m` esista solo per `S07` e `S08`;
+         - ogni descrizione sia non vuota;
+         - `composite` contenga esattamente `D01` e `D02`.
+      8. Scrivi `BatchExecutorTests`, con `@Suite(.serialized)`, `TestVolume` e un iniettore senza bersaglio dotato di `observer`.
+         - **Esecuzione completa.** L'esito è `completato`, e il log contiene nell'ordine:
+           1. `plan`, `recheck` e `prepare`;
+           2. dieci coppie `step-intent` / `step-done`;
+           3. `outcome`.
+         - **L'intento precede l'azione.** L'`observer`, a ogni `Sxx-a`, cattura un'istantanea e verifica che il file del passo sia ancora in origine.
+         - **Ricontrollo fallito.** `run` accetta un gancio di sola prova, `beforeRecheck: (() -> Void)?`, chiamato fra `X01-plan` e il ricontrollo. Se il gancio modifica un byte di `lotto/IMG_0002.jpg`, l'esito è `interrotto-prima-di-agire` e nessun file si è mosso.
+         - **Annullamento.** Con `undoAfter` e senza arresto, l'esito finale è `compensato`.
+
+      ## Verify
+      - Esegui `swift build --package-path Spikes/04-crash-recovery`. Attesa: `Build complete!`.
+      - Esegui, con timeout 600 s, `swift test --package-path Spikes/04-crash-recovery --filter "CrashPointsTests|BatchExecutorTests"`. Attesa: tutti verdi.
+      - Esegui `Spikes/04-crash-recovery/.build/debug/crashbench list-points | wc -l`. Attesa: `61`.
+      - Esegui:
+
+        ```sh
+        B=Spikes/04-crash-recovery/.build/debug/crashbench
+        $B setup; $B run --crash-at S03-b; echo "stato $?"; tail -1 Spikes/04-crash-recovery/.data/state/intent-log.jsonl; $B teardown
+        ```
+
+        Attesa:
+        - viene stampato `ARRESTO S03-b: …`;
+        - lo stato è `stato 137` (128+9; zsh può stampare `killed`);
+        - l'ultima riga del log è lo `step-intent` di `S03`.
+      - Esegui `swift format lint --strict --recursive Spikes/04-crash-recovery/Sources Spikes/04-crash-recovery/Tests`. Attesa: stato 0.
+
+      ## Done
+      - [ ] AC-1 — il meccanismo interrompe il processo per `SIGKILL` in ciascun punto dell'elenco enumerato: 61 punti derivati dal piano, stampati da `list-points`.
+      - [ ] AC-1 — il log di intenti precede ogni azione, e un ricontrollo divergente interrompe prima di agire (FR-080).
+      - [ ] AC-7 — il classificatore degli esiti implementa le otto regole nell'ordine dichiarato, e `bloccato` nasce solo dalla regola 4.
+
+      ## Blockers
+      None.
+    ref: TASK-05
+  - id: TASK-06
+    title: Recupero in un nuovo processo - riconoscimento dal disco, ripresa o compensazione, separazioni immagine/sidecar e decisione dell'utente
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-05
+    body: |-
+      ## Objective
+      `crashbench recover --strategy resume|compensate` riconosce dal disco lo stato raggiunto da ogni file del lotto. Poi riprende o compensa in modo idempotente, riferisce le separazioni fra immagine e sidecar e chiude con uno dei cinque esiti, oppure con `NON_SUPPORTABILE` e la sua traccia. `crashbench decide retry|abandon` registra la decisione dell'utente su un lotto bloccato.
+
+      ## Read
+      - `Sources/CrashKit/IntentLog.swift`: `read`, `repairTornTail`.
+      - `Sources/CrashKit/Steps.swift`: `observe`, `execute`, `compensate`, `compensatePrepare`.
+      - `Sources/CrashKit/ErrorClassifier.swift`, `OutcomeClassifier.swift`, `CrashPoints.swift` (`composite`) e `BatchExecutor.swift`.
+      - Questo piano, § *Recupero* e § *Classificatore degli esiti*.
+
+      ## Change
+      - File nuovi: `Sources/CrashKit/Recognizer.swift`, `Sources/CrashKit/Recovery.swift`.
+      - `Sources/crashbench/main.swift`: aggiungi i sottocomandi `recover`, `decide` e `status`.
+      - **Non-obiettivi:**
+        - non si modificano le regole di `OutcomeClassifier`;
+        - nessun test in questo task: gli oracoli sono TASK-07 e TASK-09;
+        - il recupero non legge mai `pre-snapshot.json`, che è l'oracolo del banco e non conoscenza della macchina.
+
+      ## Steps
+      1. Implementa `Recognizer.recognize(log:, volume:, requestedStrategy:) -> RecognizedState`.
+         1. **Log.** Esegue `log.read()`. Se c'è un `tornTail`, chiama `repairTornTail()` e annota `recordTroncato = true` con il percorso dell'evidenza.
+         2. **Piano.** Se non c'è un record `plan` completo, lo stato è `noPlan`, e il riconoscimento finisce qui.
+         3. **Volume.** Se `batchRoot` manca, o il suo UUID è diverso da `plan.volumeUUID`, ogni passo è `sospeso(G-volume-missing)` e non si osserva altro.
+         4. **Passi.** Per ogni passo, `observe`:
+            - `.done` vale `fatto`, `.notDone` vale `non-fatto`, `.partial` vale `non-fatto` (con il temporaneo annotato);
+            - `.anomaly` va all'`ErrorClassifier`. Una classe locale vale `saltato(classe)`, una sistemica `sospeso(classe)`, e `nonClassificato` vale `non-riconoscibile(traccia)`. La traccia elenca ogni posizione ispezionata con il digest trovato o «assente».
+         5. **Divergenze.** Se il log ha uno `step-done` per un passo osservato `non-fatto`, o viceversa, annota `divergenza <stepId> log=<…> disco=<…>`. **Vale il disco.**
+         6. **Posizioni.** Per ogni operazione, posizione dell'immagine e del sidecar: `orig`, `dest`, `cest`, `ass` oppure `amb`. Per `copy` vale `dest` se la copia esiste. La coppia è `SEPARATA` se le due posizioni sono diverse.
+         7. **Direzione.**
+            - Se il log contiene `undo-requested`, oppure uno `step-intent` con `direction: compensate`, la direzione è `compensate`, qualunque sia `--strategy`: una compensazione avviata non si rovescia mai in silenzio.
+            - Se l'ultimo `outcome` del log è `interrotto-prima-di-agire`, la direzione è `nessuna` e non si agisce.
+            - Altrimenti vale la strategia chiesta.
+      2. Implementa `Recovery.run(strategy:, log:, volume:, injector:, decision: .none|.retry)`.
+         1. Esegue `recognize`, e registra le separazioni **all'avvio**.
+         2. Esegue `append(.recovery(strategy, direction, summary))`.
+         3. Con `noPlan` o direzione `nessuna`, non fa nulla e passa all'esito.
+         4. **In ripresa**, per ogni passo `non-fatto`, in ordine di piano:
+            1. ripete il controllo delle precondizioni del solo passo;
+            2. `append(.stepIntent(id, .forward))`, poi `hit("Sxx-a")`;
+            3. `execute`, con `hit("Sxx-m")` per le copie;
+            4. `hit("Sxx-b")`, poi `append(.stepDone)`, poi `hit("Sxx-c")`.
+
+            Un errore **locale** diventa `append(.stepFailed)`, e la ripresa prosegue. Un errore **sistemico** diventa `append(.stepFailed)`, e la ripresa si sospende.
+         5. **In compensazione**, per ogni passo `fatto`, in ordine inverso:
+            1. `append(.stepIntent(id, .compensate))`, poi `hit("Kxx-a")`;
+            2. `compensate`, poi `hit("Kxx-b")`, poi `append(.stepDone(id, .compensate))`.
+
+            Poi `hit("K00-a")`, `compensatePrepare(created:)` (con le cartelle create lette dal record `prepare`) e `hit("K00-b")`. Gli errori seguono la stessa politica della ripresa.
+         6. **Stati finali.** Ricalcola gli stati finali con `observe` e calcola l'esito con `OutcomeClassifier.classify`. In compensazione, il disco dice se un passo è stato riportato all'origine.
+         7. **Registrazione.** `append(.outcome)`.
+      3. Implementa la stampa su stdout. Il formato è **fisso**, perché TASK-08 e TASK-09 lo analizzano: una voce per riga, chiave in maiuscolo, valori separati da spazio.
+
+         ```text
+         RECUPERO strategia=<resume|compensate> direzione=<forward|compensate|nessuna>
+         RECORD-TRONCATO <si|no>
+         DIVERGENZA <stepId> log=<…> disco=<…>           (zero o più righe)
+         PASSO <stepId> <stato all'avvio> -> <stato finale> [classe=<…> ambito=<…>]
+         COPPIA <opId> immagine=<pos> sidecar=<pos> [SEPARATA]
+         SEPARAZIONI-ALL-AVVIO <opId,opId|nessuna>
+         SEPARAZIONI-RESIDUE <opId,opId|nessuna>
+         ESITO <kind> [motivo=<reason>]
+         TRACCIA <riga>                                   (zero o più righe)
+         ```
+
+         Lo stato di uscita è 0 per qualunque esito, compreso `NON_SUPPORTABILE`: l'esito è un dato, non un errore del banco. È diverso da 0 solo per errori del banco, come un log corrotto o un volume mai creato.
+      4. Gestisci il secondo arresto di `D01` e `D02`. Se esiste `<data>/state/pending-second-crash.json`, `recover` lo consuma e lo rimuove **prima** di agire. Poi usa quel punto come bersaglio dell'iniettore e quella strategia. Il recupero successivo, senza il file, procede normalmente.
+      5. Implementa `crashbench decide retry|abandon`.
+         - Richiede che l'ultimo `outcome` del log sia `bloccato`; altrimenti stampa il motivo ed esce con 2.
+         - **`retry`:** `append(.decision(retry))`, poi `Recovery.run` nella direzione del log, con la stessa stampa.
+         - **`abandon`:** `append(.decision(abandon))`, nessuna azione sui file, poi `recognize` per riferire dove è rimasto ogni file. L'esito è `abbandonato` per la regola 3, salvo uno stato non riconoscibile, che resta `NON_SUPPORTABILE` per la regola 2.
+      6. Implementa `crashbench status`: stampa le righe `PASSO`, `COPPIA` e `SEPARAZIONI-ALL-AVVIO` dello stato riconosciuto, senza agire e senza scrivere nel log, salvo la riparazione di un record troncato, che va dichiarata. Serve alla dimostrazione del revisore.
+
+      ## Verify
+      - Esegui `swift build --package-path Spikes/04-crash-recovery`. Attesa: `Build complete!`.
+      - Esegui:
+
+        ```sh
+        B=Spikes/04-crash-recovery/.build/debug/crashbench
+        $B setup
+        $B run --crash-at S03-b; $B recover --strategy resume
+        $B run --crash-at S03-c; $B recover --strategy compensate
+        $B run --crash-at S09-b; $B status
+        $B teardown
+        ```
+
+        Attesa:
+        - la prima coppia di comandi stampa `ESITO completato`;
+        - la seconda stampa `SEPARAZIONI-ALL-AVVIO OP2` ed `ESITO compensato`;
+        - `status` mostra `PASSO S09 fatto`, con l'immagine di OP5 trovata nel Cestino per digest.
+      - Esegui `swift test --package-path Spikes/04-crash-recovery`, con timeout 900 s. Attesa: le suite già esistenti restano verdi.
+      - Esegui `swift format lint --strict --recursive Spikes/04-crash-recovery/Sources Spikes/04-crash-recovery/Tests`. Attesa: stato 0.
+
+      ## Done
+      - [ ] AC-2 — un recupero, eseguito in un nuovo processo, stampa l'esito fra i cinque oppure `NON_SUPPORTABILE`, e la posizione di immagine e sidecar per ogni coppia.
+      - [ ] AC-3 — la compensazione procede in ordine inverso, è registrata passo per passo, e il suo esito è ricavato dal disco.
+      - [ ] AC-4 — un errore sistemico sospende il recupero (`bloccato`); un errore locale fa saltare il solo passo e il recupero prosegue.
+      - [ ] AC-5 — le separazioni all'avvio e quelle residue dopo il recupero sono riferite per coppia.
+      - [ ] AC-7 — uno stato non riconoscibile produce `NON_SUPPORTABILE` con la traccia delle posizioni ispezionate.
+
+      ## Blockers
+      None.
+    ref: TASK-06
+  - id: TASK-07
+    title: Oracoli del riconoscimento e degli esiti - cinque esiti raggiunti e asseriti sull'istantanea, separazioni, e stato non riconoscibile mai bloccato
+    type: Test
+    status: DONE
+    dependencies:
+      - TASK-06
+    body: |-
+      ## Objective
+      Una suite dimostra quattro cose:
+      - ciascuno dei cinque esiti, e ciascuno dei due motivi di `NON_SUPPORTABILE`, è raggiungibile;
+      - l'esito dichiarato coincide con l'istantanea del disco;
+      - la compensazione si confronta campo per campo con lo stato di partenza;
+      - le separazioni vengono rilevate, e uno stato non riconoscibile non diventa mai `bloccato`.
+
+      ## Read
+      - `Sources/CrashKit/OutcomeClassifier.swift`: le otto regole e il loro ordine.
+      - `Sources/CrashKit/Recognizer.swift` e `Recovery.swift`.
+      - `Sources/CrashKit/Perturbations.swift`: `apply`, `remove`, la regola del bersaglio.
+      - `Sources/CrashKit/Snapshot.swift`: `diff`, `isDirectoryMtime`.
+      - `Sources/CrashKit/CrashPoints.swift`: `CrashInjector` in modalità `.throwForTest`.
+
+      ## Change
+      - File nuovi: `Tests/CrashKitTests/OutcomeClassifierTests.swift`, `Tests/CrashKitTests/RecognizerTests.swift`, `Tests/CrashKitTests/RecoveryScenarioTests.swift`.
+      - Correzioni ai sorgenti **ammesse solo** in `Recognizer.swift`, `Recovery.swift` e `OutcomeClassifier.swift`, e solo quando un test di questo task mostra che il codice viola una regola **dichiarata in questo piano**. Ogni correzione va motivata nel messaggio di commit.
+      - **Non-obiettivi:** non si cambiano le regole per far passare un test, e non si indeboliscono le asserzioni sull'istantanea.
+
+      ## Steps
+      1. Scrivi `OutcomeClassifierTests`, con test parametrici `@Test(arguments:)` su `OutcomeInput` costruiti a mano.
+         - Una riga per ciascuna delle regole da 1 a 8, con l'esito atteso.
+         - Più quattro casi di precedenza:
+           - un passo `non-riconoscibile` **e** un errore sistemico presente danno `NON_SUPPORTABILE` (regola 2), **non** `bloccato`;
+           - `decision == abandon` con un passo `non-riconoscibile` dà `NON_SUPPORTABILE`;
+           - zero passi dà la regola 1;
+           - direzione `compensate` con un passo ancora `fatto` e nessun errore dà la regola 8.
+         - Un test di proprietà enumera tutte le combinazioni di `unrecognized` vuoto o non vuoto, `unresolvedSystemic` vuoto o non vuoto, e `decision`. Verifica che `kind == bloccato` implichi sempre `unrecognized` e `unclassified` vuoti.
+      2. Scrivi `RecognizerTests`, con `@Suite(.serialized)` e `TestVolume`. Ogni stato è costruito eseguendo `BatchExecutor` con un iniettore `.throwForTest` e poi modificando il disco a mano.
+         - **Il disco prevale sul log.** Arresto a `S03-b`, cioè azione eseguita e fatto non registrato: il passo è `fatto`, e compare una `DIVERGENZA` fra log e disco.
+         - **File in due posizioni.** Arresto a `S03-c`, poi copia manuale di `selezione/IMG_0002.jpg` in `lotto/IMG_0002.jpg`. Il file ha lo stesso digest in origine e in destinazione, quindi `S03` è `non-riconoscibile`, con una traccia che contiene entrambe le posizioni.
+         - **Collisione nel Cestino.** Arresto a `S09-b`, con una voce `IMG_0005.jpg` di contenuto diverso già presente nel Cestino prima del lotto: `S09` è `fatto`, e la voce trovata è quella con il digest giusto, il cui nome porta il suffisso orario.
+         - **Due voci con lo stesso digest.** Una copia manuale della voce nel Cestino rende `S09` `non-riconoscibile`.
+         - **Separazione.** Arresto a `S03-c` dà `COPPIA OP2 immagine=dest sidecar=orig SEPARATA`.
+         - **Record troncato.** L'arresto a `X00-plan-torn` lascia un log senza piano completo: `recordTroncato` è vero, il frammento è salvato in `state/torn-*.txt` e lo stato è `noPlan`.
+      3. Scrivi `RecoveryScenarioTests`, con `@Suite(.serialized)` e `TestVolume`, interamente in-process con `.throwForTest`.
+         - **Struttura di ogni scenario.**
+           1. Prende un'istantanea `pre` prima del lotto e una `post` dopo il recupero.
+           2. Asserisce l'esito **e** l'istantanea. L'istantanea è l'oracolo; la riga `ESITO` è l'affermazione da verificare.
+         - **Gli scenari.**
+
+           | Esito atteso | Arresto | Azioni dopo l'arresto | Asserzioni sull'istantanea `post` |
+           |---|---|---|---|
+           | `completato` | `S04-b` | `resume` | percorsi e digest uguali allo stato atteso del lotto completato, calcolato applicando il piano a `pre`; `OP4` presente sia in origine sia in `consegna/` |
+           | `compensato` | `S04-b` | `compensate` | `diff(pre, post)` non contiene scostamenti su file (`sha256`, `inode`, `size`, `mode`, `flags`, `xattr`, `aggiunto`, `rimosso`); `selezione/` è stata rimossa, perché creata dal lotto e vuota; gli scostamenti `isDirectoryMtime` sono ammessi e stampati |
+           | `parzialmente-recuperato` | `S06-b` | perturbazione `L-locked`, che per la regola del bersaglio colpisce `S09`; poi `resume` | `S07`, `S08` e `S10` fatti; `S09` saltato con `L-locked`, locale; `COPPIA OP5 … SEPARATA`, con l'immagine in origine e il sidecar nel Cestino |
+           | `bloccato` | `S06-b` | perturbazione `G-folder-readonly`; poi `resume` | `post` uguale all'istantanea presa subito dopo la perturbazione: dopo la sospensione nessun file si è mosso. Poi `remove` e `decide retry` danno `completato` |
+           | `abbandonato` | `S06-b` | perturbazione `G-volume-missing`; `resume` dà `bloccato`; poi `decide abandon` | nessun file si è mosso; dopo `remove`, le righe `COPPIA` stampate coincidono con le posizioni dell'istantanea |
+           | `NON_SUPPORTABILE`, motivo `stato-non-riconoscibile` | `S03-c` | copia manuale dell'immagine in origine; poi `resume` | l'esito **non è** `bloccato`, e la traccia contiene le due posizioni |
+           | `NON_SUPPORTABILE`, motivo `nessun-esito-applicabile` | `X00-plan-torn` | `resume` | `diff(pre, post)` vuoto sui file |
+
+         - **Il caso del piano troncato.** Lo stato è riconoscibile e coincide con quello di partenza, ma nessuno dei cinque esiti lo descrive. Il test fissa il comportamento dichiarato; l'interpretazione per ADR-007 spetta a TASK-10.
+      4. Per ogni scenario, quando l'asserzione fallisce, stampa l'elenco completo degli scostamenti: deve essere diagnosticabile senza rieseguire.
+
+      ## Verify
+      - Esegui, con timeout 600 s, `swift test --package-path Spikes/04-crash-recovery --filter "OutcomeClassifierTests|RecognizerTests|RecoveryScenarioTests"`. Attesa: tutti verdi.
+      - Esegui, con timeout 900 s, `swift test --package-path Spikes/04-crash-recovery`. Attesa: l'intera suite è verde, senza regressioni nelle suite dei task precedenti.
+      - Esegui `mount | grep -c "04-crash-recovery/.data"`. Attesa: `0`.
+      - Esegui `swift format lint --strict --recursive Spikes/04-crash-recovery/Sources Spikes/04-crash-recovery/Tests`. Attesa: stato 0.
+
+      ## Done
+      - [ ] AC-2 — ciascuno dei cinque esiti è raggiunto da uno scenario, ed è asserito sull'istantanea del disco, non sulla sola riga stampata.
+      - [ ] AC-3 — la compensazione è confrontata campo per campo con l'istantanea precedente all'avvio del lotto, e gli scostamenti ammessi sono solo `mtime` di directory, stampati.
+      - [ ] AC-4 — un errore sistemico porta a `bloccato`, e `retry` e `abandon` portano rispettivamente a `completato` e `abbandonato`. Un errore locale porta a `parzialmente-recuperato`.
+      - [ ] AC-5 — la separazione di `OP2` a `S03-c` e quella residua di `OP5` sono rilevate e riferite con le posizioni.
+      - [ ] AC-7 — uno stato non riconoscibile produce `NON_SUPPORTABILE` anche in presenza di un errore sistemico o di una decisione di abbandono, e mai `bloccato`.
+
+      ## Blockers
+      None.
+    ref: TASK-07
+  - id: TASK-08
+    title: Matrice in processi figli con ripetizioni, oracoli indipendenti dall'istantanea e JSON di misura tracciabile
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-07
+    body: |-
+      ## Objective
+      `crashbench run-matrix` esegue in processi figli ogni cella della matrice, con ripetizioni. Le celle sono 98 di base, cioè 61 punti con le strategie previste, più 48 combinazioni di perturbazione. Il comando verifica che ogni arresto sia avvenuto davvero, confronta le affermazioni della macchina con le istantanee del banco e scrive un JSON di misura con `measurementId`.
+
+      ## Read
+      - `Sources/crashbench/main.swift`: i sottocomandi `run`, `perturb`, `unperturb`, `recover`, `decide`, e il formato fisso dell'output di `recover` (TASK-06, passo 3).
+      - `Sources/CrashKit/CrashPoints.swift`, `Snapshot.swift`, `HostFingerprint.swift` e `Fixtures.swift` (digest di `MANIFEST.json`).
+      - Questo piano, § *Matrice e oracoli indipendenti* e § *Perturbazioni*.
+
+      ## Change
+      - File nuovi: `Sources/CrashKit/Matrix.swift`, `Sources/CrashKit/MeasurementResult.swift`.
+      - `Sources/crashbench/main.swift`: aggiungi il sottocomando `run-matrix`.
+      - **Non-obiettivi:**
+        - la matrice non esegue `run` né `recover` nel proprio processo: lo fanno sempre i figli;
+        - non si modificano la macchina né il classificatore.
+
+      ## Steps
+      1. **Celle.**
+         - Ogni punto `X*` e `S*` dà due celle, `resume` e `compensate`.
+         - Ogni punto `K*` dà una cella, `compensate`, perché la direzione viene dal log.
+         - `D01` dà una cella `resume`, `D02` una cella `compensate`.
+         - Le perturbazioni danno una cella per ogni combinazione di:
+           - classe: le otto di `ErrorClass.allCases`;
+           - punto: `X03-prepare`, `S06-b` e `S10-c`;
+           - strategia: `resume` e `compensate`.
+         - Con la fixture fanno 37 × 2 + 22 + 2 = 98 celle di base, più 48 celle di perturbazione.
+         - L'ID di cella è `<punto>/<strategia>[/<classe>]`.
+      2. **Esecuzione di una ripetizione.** Usa il binario stesso, `Bundle.main.executableURL`, con la `--data-dir` della matrice.
+         1. In-process: `resetBatchFolder`, poi istantanea `pre`.
+         2. Figlio: `run --crash-at <punto>`.
+            - Pretendi `terminationReason == .uncaughtSignal`, `terminationStatus == 9` e `ARRESTO <punto>` su stdout.
+            - Altrimenti la ripetizione è `PUNTO_NON_RAGGIUNTO`, e la matrice continua ma esce con 3 alla fine.
+         3. In-process: istantanea `crash`. Le **separazioni all'arresto** si calcolano qui, dalle posizioni nell'istantanea, applicando le regole di posizione del piano. È l'oracolo indipendente dal riconoscitore.
+         4. Solo per le celle di perturbazione, figlio: `perturb <classe> --strategy <s>`. Con `NON-APPLICABILE`, la cella è `applicable: false`, con il motivo, e si passa al punto 8.
+         5. Figlio: `recover --strategy <s>`.
+            - Per `D01` e `D02`, il primo `recover` deve morire per segnale 9 al secondo punto; poi segue un secondo `recover`.
+            - Analizza le righe `ESITO`, `PASSO`, `COPPIA`, `SEPARAZIONI-ALL-AVVIO`, `SEPARAZIONI-RESIDUE` e `TRACCIA`.
+         6. In-process: istantanea `post`. Se il volume è stato espulso dalla perturbazione, prima `attach`, poi l'istantanea.
+         7. Se l'esito è `bloccato`, esegui due rami:
+            - **ramo `abandon`**, su questa stessa ripetizione: figlio `decide abandon`, e registra l'esito;
+            - **ramo `retry`**, su una ripetizione nuova: ripeti i passi da 1 a 5, poi figlio `unperturb`, poi figlio `decide retry`, e registra l'esito.
+         8. Figlio: `unperturb`. È sempre eseguito, ed è idempotente. Se il volume non è montato, esegui `attach`.
+      3. **Oracoli calcolati dalla matrice**, mai dalla macchina:
+         - **`compensation`.** Vale per ogni cella in cui la direzione effettiva è `compensate`, cioè con la riga `RECUPERO … direzione=compensate`.
+           - `attempted` è `true`.
+           - `deviations` è `Snapshot.diff(pre, post)`, diviso in `fileDeviations` e `directoryMtimeDeviations`.
+           - `matchesPre` è `true` se e solo se entrambi gli elenchi sono vuoti.
+         - **`resumeMatchesExpected`.** Vale per gli esiti `completato`: è il confronto di percorsi e digest fra lo stato atteso del lotto completato, derivato dal piano e da `pre`, e `post`.
+         - **`separationDetected`.** Confronta le separazioni all'arresto del punto 3 con `SEPARAZIONI-ALL-AVVIO`:
+           - `rilevata` se coincidono;
+           - `non-rilevata` se ne manca una;
+           - `falsa-segnalazione` se ne è riferita una che l'istantanea non mostra;
+           - `nessuna` se non ce ne sono.
+         - **`recognitionError`.** Vale `true` se una riga `COPPIA` dichiara una posizione diversa da quella dell'istantanea `post`. Una cella con `recognitionError` è marcata `RICONOSCIMENTO_ERRATO`. È distinta da `NON_SUPPORTABILE`: lì la macchina ammette di non sapere, qui afferma il falso.
+      4. **Ripetizioni e profili.**
+         - `--profile full` ha 5 ripetizioni per default, `--profile smoke` 1.
+         - `--repetitions N` sovrascrive il default.
+         - Il profilo `smoke` contiene:
+           - i punti `X01-plan`, `S03-b`, `S07-m`, `S10-c`, `K05-a` e `D01`, con le loro strategie;
+           - le celle `S06-b/resume/L-locked` e `S06-b/resume/G-volume-missing`.
+         - **Conteggio degli esiti.** Per ogni cella, `outcomes` conta gli esiti per tipo, per esempio `{"completato": 5}`.
+         - **Ripetizioni discordanti.** Le ripetizioni discordanti restano tutte nei conteggi, e la cella ha `nonDeterministic: true`.
+         - **Riepilogo delle celle.** Gli oracoli del punto 3 si riportano dalla prima ripetizione. Ogni ripetizione che diverge dalla prima per un oracolo marca la cella `nonDeterministic`, con i valori divergenti in `repetitionNotes`.
+      5. **Schema `MeasurementResult`.** È `Codable`, scritto con `.sortedKeys` e `.prettyPrinted`.
+         - **Campi di testata:**
+           - `measurementId`, nella forma `crash-matrix-<UTC yyyyMMdd'T'HHmmss'Z'>-<8 esadecimali>`;
+           - `spike: "04-crash-recovery"`;
+           - `host`, cioè `HostFingerprint`;
+           - `volume`, con formato, dimensione e `fs: "APFS"`;
+           - `fixtureManifestSha256`;
+           - `profile` e `repetitions`;
+           - `startedAt` e `durationSeconds`;
+           - `points`, l'elenco completo di `list-points`.
+         - **`cells[]`.** Ogni cella ha:
+           - `cellId`, `point`, `phase`, `strategy`, e le opzionali `perturbation` e `target`;
+           - `applicable` e `notApplicableReason`;
+           - `outcomes` e `reasons`, i motivi di `NON_SUPPORTABILE` con i conteggi;
+           - `trace`, `steps` e `pairs`, dalla prima ripetizione: `steps` è stepId → stato finale, `pairs` è opId → posizioni di immagine e sidecar dall'istantanea `post`;
+           - `separationsAtCrash`, `separationsReported` e `separationDetected`;
+           - `compensation`, con `attempted`, `matchesPre`, `fileDeviations` e `directoryMtimeDeviations`;
+           - `resumeMatchesExpected`, `recognitionError`;
+           - `followUp`, con `retry` e `abandon`;
+           - `errorClass`, `errorScope`, `errnoObserved` e `cocoaObserved`;
+           - `nonDeterministic` e `repetitionNotes`;
+           - `pointReached`.
+      6. **Scrittura e riepilogo.**
+         - Il JSON va in `runs/<measurementId>.json`; `--out <percorso>` lo sostituisce.
+         - Su stderr una riga di avanzamento per cella.
+         - Su stdout un riepilogo:
+           - numero di celle;
+           - istogramma degli esiti;
+           - numero di `NON_SUPPORTABILE`, `RICONOSCIMENTO_ERRATO` e `PUNTO_NON_RAGGIUNTO`;
+           - percorso del JSON.
+         - **Stato di uscita:**
+           - 0 normalmente;
+           - 3 se c'è almeno un `PUNTO_NON_RAGGIUNTO`, che è un difetto del banco.
+         - `NON_SUPPORTABILE` e `RICONOSCIMENTO_ERRATO` **non** cambiano lo stato di uscita: sono misure.
+      7. Prima di iniziare, `run-matrix` esegue `setup` se il volume non è montato. Alla fine lo lascia montato, così l'esecuzione resta ispezionabile.
+
+      ## Verify
+      - Esegui `swift build --package-path Spikes/04-crash-recovery`. Attesa: `Build complete!`.
+      - Esegui:
+
+        ```sh
+        Spikes/04-crash-recovery/.build/debug/crashbench run-matrix --profile smoke --out Spikes/04-crash-recovery/runs/smoke-check.json; echo "stato $?"
+        ```
+
+        Attesa: `stato 0` e un riepilogo senza `PUNTO_NON_RAGGIUNTO`.
+      - Esegui:
+
+        ```sh
+        python3 -c "import json;d=json.load(open('Spikes/04-crash-recovery/runs/smoke-check.json'));print(len(d['points']),len(d['cells']),all(sum(c['outcomes'].values())==d['repetitions'] for c in d['cells'] if c['applicable']))"
+        ```
+
+        Attesa: `61 <numero celle smoke> True`. Il conteggio delle celle smoke è quello del profilo: 6 punti con le loro strategie, più 2 perturbazioni.
+      - Esegui `Spikes/04-crash-recovery/.build/debug/crashbench teardown`, poi `mount | grep -c "04-crash-recovery/.data"`. Attesa: `0`.
+      - Esegui, con timeout 900 s, `swift test --package-path Spikes/04-crash-recovery`. Attesa: la suite resta verde.
+      - Esegui `swift format lint --strict --recursive Spikes/04-crash-recovery/Sources Spikes/04-crash-recovery/Tests`. Attesa: stato 0.
+
+      ## Done
+      - [ ] AC-2 — ogni cella registra gli esiti con il numero di ripetizioni, e lo stato di immagine e sidecar dopo il recupero preso dall'istantanea.
+      - [ ] AC-3 — per ogni cella con compensazione tentata, la coincidenza con lo stato di partenza è calcolata dalla matrice, con l'elenco degli scostamenti.
+      - [ ] AC-4 — le celle di perturbazione riportano classe, ambito, errno o errore Cocoa osservato, e gli esiti di `retry` e `abandon` dopo un `bloccato`.
+      - [ ] AC-5 — la separazione all'arresto è osservata dall'istantanea e confrontata con quanto riferisce il recupero.
+      - [ ] AC-7 — `NON_SUPPORTABILE` e `RICONOSCIMENTO_ERRATO` sono registrati come distinti, ciascuno con la propria traccia.
+      - [ ] AC-1 — nessuna cella è dichiarata senza che il figlio sia morto per segnale 9 nel punto chiesto.
+
+      ## Blockers
+      None.
+    ref: TASK-08
+  - id: TASK-09
+    title: Integrazione sul binario reale - arresto per SIGKILL osservato dal padre, recupero in un nuovo processo e matrice smoke conforme
+    type: Test
+    status: DONE
+    dependencies:
+      - TASK-08
+    body: |-
+      ## Objective
+      Test di integrazione sul binario `crashbench` reale dimostrano tre cose:
+      - l'arresto avviene davvero per `SIGKILL` nel punto chiesto, e lascia il log e il disco nello stato che quel punto dichiara;
+      - un recupero in un nuovo processo stampa l'esito e le posizioni;
+      - la matrice `smoke` produce un JSON conforme allo schema.
+
+      ## Read
+      - `Spikes/01-scale-memory/Tests/BenchKitTests/BenchIntegrationTests.swift`: come Spike 01 lancia `.build/debug/bench` con `Process` e ne raccoglie l'output.
+      - `Sources/crashbench/main.swift`, e il formato fisso dell'output di `recover`.
+      - `Sources/CrashKit/MeasurementResult.swift`.
+
+      ## Change
+      - File nuovo: `Tests/CrashKitTests/CrashbenchIntegrationTests.swift`.
+      - `Tests/CrashKitTests/TestSupport.swift`: aggiungi l'helper `runCrashbench`.
+      - **Non-obiettivi:**
+        - nessuna modifica ai sorgenti;
+        - se un test rivela un difetto, il difetto si corregge nel task che possiede il file, e qui si riporta come regressione.
+
+      ## Steps
+      1. Aggiungi `runCrashbench(_ args: [String], dataDir: URL) -> (reason: Process.TerminationReason, status: Int32, stdout: String, stderr: String)`.
+         - Lancia `CrashPaths.packageRoot/.build/debug/crashbench`, aggiungendo `--data-dir`.
+         - Legge stdout e stderr fino alla chiusura dei pipe, poi chiama `waitUntilExit`.
+      2. Imposta la suite con `@Suite(.serialized, .timeLimit(.minutes(10)))`.
+         - Directory dati: `CrashPaths.defaultDataDirectory/tests/integration-<UUID>`.
+         - All'inizio `setup`; alla fine `teardown`, garantito con `defer`, e rimozione della directory.
+      3. **Arresti reali.** Per ogni punto `X01-plan`, `S03-b`, `S07-m`, `S09-b` e `K05-a`, esegui `run --crash-at <punto>` e verifica `reason == .uncaughtSignal`, `status == 9` e `ARRESTO <punto>` su stdout. Poi verifica lo stato lasciato:
+
+         | Punto | Ultimo record del log | Stato del disco |
+         |---|---|---|
+         | `X01-plan` | `plan` | nessun file mosso |
+         | `S03-b` | `step-intent` di `S03` | `lotto/selezione/IMG_0002.jpg` esiste |
+         | `S07-m` | `step-intent` di `S07` | `.IMG_0004.jpg.partial-*` presente in `consegna/`, e `consegna/IMG_0004.jpg` assente |
+         | `S09-b` | `step-intent` di `S09` | `lotto/IMG_0005.jpg` assente, e una voce con il suo digest in `.Trashes/<uid>` |
+         | `K05-a` | `step-intent` con `direction: compensate` per `S05` | — |
+
+         Per `K05-a` verifica anche che nel log ci sia `outcome completato` seguito da `undo-requested`.
+      4. **Record troncato.** `run --crash-at X00-plan-torn` lascia un log il cui ultimo frammento non termina con `\n`. Poi `recover --strategy resume` esce con 0 e stampa `RECORD-TRONCATO si` ed `ESITO NON_SUPPORTABILE motivo=nessun-esito-applicabile`.
+      5. **Ripresa.** `run --crash-at S03-b`, poi `recover --strategy resume` in un nuovo processo: esce con 0, stampa `ESITO completato` e cinque righe `COPPIA`, nessuna `SEPARATA`.
+      6. **Compensazione e separazione.** `run --crash-at S03-c`, poi `recover --strategy compensate`: stampa `SEPARAZIONI-ALL-AVVIO OP2`, `ESITO compensato` e `SEPARAZIONI-RESIDUE nessuna`.
+      7. **Doppio arresto.** Con `run --crash-at D01`, il primo `recover --strategy resume` termina per segnale 9 con `ARRESTO S08-b`. Il secondo `recover --strategy resume` stampa `ESITO completato`.
+      8. **Matrice smoke.** `run-matrix --profile smoke --out <dataDir>/smoke.json` esce con 0. Il JSON:
+         - si decodifica con `MeasurementResult`;
+         - ha un `measurementId` uguale al nome del file senza estensione;
+         - ha `points.count == 61`;
+         - per ogni cella con `applicable`, ha la somma di `outcomes` uguale a `repetitions` e `pointReached == true`;
+         - ha almeno una cella con `compensation.attempted == true` e almeno una con `separationsAtCrash` non vuoto.
+
+      ## Verify
+      - Esegui, con timeout 900 s, `swift test --package-path Spikes/04-crash-recovery --filter CrashbenchIntegrationTests`. Attesa: tutti verdi.
+      - Esegui `mount | grep -c "04-crash-recovery/.data"`. Attesa: `0` dopo la suite.
+      - Esegui `swift format lint --strict --recursive Spikes/04-crash-recovery/Tests`. Attesa: stato 0.
+
+      ## Done
+      - [ ] AC-1 — l'interruzione per `SIGKILL` al punto scelto è osservata da un processo esterno, e lo stato lasciato su log e disco corrisponde alla descrizione del punto: piano, intento, temporaneo di copia, Cestino, compensazione.
+      - [ ] AC-2 — un recupero in un nuovo processo stampa l'esito e la posizione di immagine e sidecar di ogni coppia.
+      - [ ] AC-5 — la separazione di `OP2` a `S03-c` è riferita dal recupero sul binario reale, e non resta dopo la compensazione.
+      - [ ] AC-7 — il record troncato del piano produce `NON_SUPPORTABILE` con motivo `nessun-esito-applicabile`, e non `bloccato`.
+
+      ## Blockers
+      None.
+    ref: TASK-09
+  - id: TASK-10
+    title: Esecuzione completa della matrice, misura versionata, RESULT.md con l'esito su ADR-007 e PROCEDURE.md ripetibile
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-09
+    body: |-
+      ## Objective
+      La matrice `full` è eseguita, e l'esecuzione scelta è versionata sotto `measurements/`. `RESULT.md` pubblica l'esito del cancello: una riga per punto, compensazioni, classi di errore, punti bloccati, separazioni, esiti non supportabili ed esito su ADR-007. Ogni sua cifra viene dal JSON versionato. `PROCEDURE.md` permette a un altro sviluppatore di ripetere tutto.
+
+      ## Read
+      - `Sources/CrashKit/MeasurementResult.swift`, lo schema del JSON.
+      - `Spikes/01-scale-memory/RESULT.md` e `PROCEDURE.md`, per tono, struttura e il modo in cui ogni cifra rimanda a un `measurementId`.
+      - `docs/PRD.md`: righe 530 (ADR-007), 688-695 (FR-077…FR-084), 638 (FR-053), 748-749 (NFR-A2, NFR-A3) e 784 (NFR-I8).
+      - Questo piano, § *Limiti dichiarati*, § *Classificazione degli errori* e § *Classificatore degli esiti*.
+
+      ## Change
+      - File nuovi: `Spikes/04-crash-recovery/RESULT.md`, `Spikes/04-crash-recovery/PROCEDURE.md` ed esattamente **un** file `Spikes/04-crash-recovery/measurements/<measurementId>.json`.
+      - `Spikes/04-crash-recovery/README.md`: aggiorna i rimandi.
+      - **Non-obiettivi:**
+        - nessuna modifica a `docs/PRD.md`: il testo di sostituzione di ADR-007 sta in `RESULT.md` e non si applica al PRD;
+        - nessuna modifica alla macchina per «far chiudere» la tabella, salvo i difetti del passo 2.
+
+      ## Steps
+      1. Esegui `.build/debug/crashbench setup`, poi `.build/debug/crashbench run-matrix --profile full --repetitions 5`. Annota la durata. Poi esegui `teardown`.
+      2. Tratta così le anomalie del riepilogo.
+         - **`PUNTO_NON_RAGGIUNTO`** è un difetto del banco. Correggilo nel file responsabile, aggiungi un test in `CrashbenchIntegrationTests` che lo riproduca, e riesegui il passo 1.
+         - **`RICONOSCIMENTO_ERRATO`** va guardato da vicino.
+           - Se il riconoscitore contraddice una regola dichiarata in questo piano, è un difetto: aggiungi un caso in `RecognizerTests` che lo riproduca, correggi e riesegui.
+           - Altrimenti è un **limite misurato**: non va corretto, va riportato in § *Esiti non supportabili*, con la traccia.
+         - **`NON_SUPPORTABILE`** e le celle `nonDeterministic` **sono misure**: non si correggono, si riportano.
+      3. Copia il JSON scelto da `runs/` a `measurements/`. È l'unico versionato; gli altri restano in `runs/`, che è ignorato.
+      4. Scrivi `RESULT.md` con queste sezioni, in quest'ordine. I titoli sono fissi, perché TASK-11 li cerca.
+         - **`# Cancello 4 — Iniezione di arresti su un lotto di operazioni su file`**, con un'introduzione di tre righe.
+         - **`## Configurazione`.** Riporta:
+           - `measurementId`;
+           - l'host dal JSON: modello, versione e build di macOS, uid;
+           - il volume: APFS su immagine ASIF da 64 MB;
+           - il digest del manifest delle fixture;
+           - il profilo e le ripetizioni;
+           - la durata.
+         - **`## Limiti dichiarati`.** Elenca:
+           - `SIGKILL` non equivale a una perdita di alimentazione;
+           - un solo volume APFS locale, perché le altre classi spettano al cancello n°2;
+           - il log JSONL non è `DurableState`, quindi ADR-003 non è provato;
+           - `ctime` e `atime` sono esclusi;
+           - il doppio arresto è coperto solo da `D01` e `D02`;
+           - il lotto è unico, con 5 operazioni e 10 passi;
+           - il Cestino è per uid.
+         - **`## Punti di interruzione`** (AC-2). Una tabella con intestazione:
+
+           `| Punto | Fase | Esito ripresa | Esito compensazione | Ripetizioni | Stato dopo ripresa | Stato dopo compensazione |`
+
+           - Una riga per ciascuno dei 61 punti, nell'ordine di `list-points`.
+           - Un esito si scrive come `completato (5/5)`. Più esiti si separano con `; `, per esempio `completato (4/5); NON_SUPPORTABILE (1/5)`.
+           - Si scrive `—` dove la strategia non si applica: punti `K*` e `D02` per la ripresa, `D01` per la compensazione.
+           - Lo stato di una coppia si scrive `OPn i:<pos> s:<pos>`, con le coppie separate da spazio, e `<pos>` uno fra `orig`, `dest`, `cest`, `ass` e `amb`.
+           - Sotto la tabella, la legenda.
+         - **`## Compensazione`** (AC-3). Una tabella con intestazione:
+
+           `| Cella | Esito | Coincide con lo stato iniziale | Scostamenti su file | Scostamenti mtime di directory |`
+
+           - Una riga per **ogni** cella con `compensation.attempted`.
+           - «Coincide» vale `sì` oppure `no`.
+           - Gli scostamenti si scrivono `percorso:campo`, separati da `, `; `nessuno` se l'elenco è vuoto.
+           - Sotto la tabella, un paragrafo che **nomina** gli scostamenti ricorrenti e la loro causa (per esempio `.DS_Store` nel Cestino, `mtime` delle directory, copia nel Cestino dopo la compensazione di `OP4`), invece di riportare un esito complessivo.
+         - **`## Classi di errore`** (AC-4). Una tabella con intestazione:
+
+           `| Classe | Ambito adottato | Errore osservato | Celle provate | Esiti | Classificazione confermata |`
+
+           - Otto righe.
+           - «Errore osservato» riporta l'errno, l'errore Cocoa oppure `non applicabile`.
+           - «Classificazione confermata» vale `sì` oppure `no — <motivo>`.
+           - Sotto la tabella, la distinzione fra errore locale ed errore sistemico, motivata dalle celle.
+         - **`## Punti bloccati in attesa dell'utente`** (AC-4). Una tabella con intestazione:
+
+           `| Cella | Classe | Ambito | Ragione | Esito dopo retry | Esito dopo abandon |`
+
+           - Una riga per **ogni** cella con esito `bloccato`.
+           - La ragione è una frase che spiega perché l'intervento umano è legittimo, per esempio «il volume non c'è: né riprendere né compensare è possibile senza di esso».
+         - **`## Separazione di immagine e sidecar`** (AC-5). Una tabella con intestazione:
+
+           `| Cella | Coppie separate all'arresto | Rilevata dal recupero | Cosa riferisce | Separazioni residue |`
+
+           Una riga per ogni cella con `separationsAtCrash` non vuoto.
+         - **`## Esiti non supportabili`** (AC-7). Una tabella con intestazione:
+
+           `| Cella | Motivo | Traccia |`
+
+           - Una riga per **ogni** cella con almeno una ripetizione `NON_SUPPORTABILE`, e per ogni cella `RICONOSCIMENTO_ERRATO`.
+           - Sotto la tabella, la frase esplicita che nessuna di queste celle è stata riclassificata come «bloccato in attesa dell'utente».
+         - **`## Esito su ADR-007`** (AC-6).
+           - Una riga `ADR-007: **confermato**` oppure `ADR-007: **emendato**`, con **uno e un solo** marcatore.
+           - Se emendato, una sottosezione `### Testo di sostituzione` con il testo proposto.
+           - Se i cinque esiti non reggono, una sottosezione `### Insieme di esiti sostitutivo` che cita gli ID di cella che lo motivano. Per esempio, il caso di `X00-plan-torn` (`nessun-esito-applicabile`) e l'esito `interrotto-prima-di-agire` di FR-080, che non è fra i cinque.
+           - Una frase per ciascuna delle domande del cancello nel PRD (riga 293): quale esito si raggiunge da ogni punto, se la compensazione è corretta, e quali casi finiscono legittimamente in «bloccato».
+         - **`## Conseguenze per la costruzione`.** Che cosa la Tappa 3 deve ereditare. Per esempio:
+           - la classificazione per ambito;
+           - il Cestino cercato per digest;
+           - la direzione di una compensazione avviata;
+           - gli scostamenti da dichiarare all'utente;
+           - l'eventuale esito aggiuntivo.
+
+         **Regole di scrittura:**
+         - ogni esito, conteggio e scostamento viene dal JSON versionato;
+         - nessun «garantito»: vale il vocabolario del PRD, **recuperabile** e non atomico;
+         - nessun giudizio senza la cella che lo sostiene.
+      5. Scrivi `PROCEDURE.md`, rivolto a un altro sviluppatore. Contiene:
+         - **i prerequisiti:** macOS 15 o successivo su Apple Silicon, toolchain Swift 6 dei Command Line Tools, `diskutil image`, circa 100 MB liberi; nessun `sudo`;
+         - **la build:** `swift build --package-path Spikes/04-crash-recovery`;
+         - **la dimostrazione manuale di un punto**, nella sequenza:
+           1. `setup`;
+           2. `list-points`;
+           3. `run --crash-at <id>`, osservando `zsh: killed`;
+           4. `status`;
+           5. `recover --strategy resume|compensate`;
+           6. il ciclo `perturb`, `recover`, `decide retry|abandon`, `unperturb`;
+         - **la matrice completa**, con la durata attesa;
+         - **la chiusura:** `teardown`, e la pulizia con `rm -rf Spikes/04-crash-recovery/.data`;
+         - **la nota sul Cestino:** il Cestino dell'utente non viene toccato, perché il Cestino usato è quello del volume di lavoro.
+
+         Usa il binario `.build/debug/crashbench` e non `swift run`, perché preserva lo stato 137 dell'arresto.
+      6. Aggiorna `README.md` con i rimandi a `PROCEDURE.md`, `RESULT.md` e `measurements/`.
+
+      ## Verify
+      - Esegui `git ls-files --others --exclude-standard Spikes/04-crash-recovery/measurements | wc -l`. Attesa: `1`.
+      - Esegui `grep -cE "ADR-007: \*\*(confermato|emendato)\*\*" Spikes/04-crash-recovery/RESULT.md`. Attesa: `1`.
+      - Esegui `for s in Configurazione "Limiti dichiarati" "Punti di interruzione" Compensazione "Classi di errore" "Punti bloccati" "Separazione di immagine" "Esiti non supportabili" "Esito su ADR-007" "Conseguenze per la costruzione"; do grep -q "^## $s" Spikes/04-crash-recovery/RESULT.md || echo "manca $s"; done`. Attesa: nessun output.
+      - Esegui `git status --porcelain -- docs/PRD.md`. Attesa: nessun output.
+      - Esegui `mount | grep -c "04-crash-recovery/.data"`. Attesa: `0`.
+
+      La verifica completa della corrispondenza fra documento e JSON è TASK-11.
+
+      ## Done
+      - [ ] AC-2 — § *Punti di interruzione* ha una riga per ciascuno dei 61 punti, con l'esito per strategia, le ripetizioni e lo stato di immagine e sidecar.
+      - [ ] AC-3 — § *Compensazione* dichiara per ogni cella compensata se lo stato coincide con quello di partenza, e nomina ogni scostamento.
+      - [ ] AC-4 — § *Classi di errore* riporta l'ambito adottato per le otto classi e se ha retto; § *Punti bloccati in attesa dell'utente* nomina ogni cella bloccata con la ragione, distinguendo locale e sistemico.
+      - [ ] AC-5 — § *Separazione di immagine e sidecar* riporta se il recupero rileva la separazione e cosa riferisce.
+      - [ ] AC-6 — § *Esito su ADR-007* ha un solo marcatore. Se emendato, ha il testo di sostituzione, ed eventualmente l'insieme di esiti sostitutivo con le celle che lo motivano.
+      - [ ] AC-7 — § *Esiti non supportabili* elenca ogni cella `NON_SUPPORTABILE` o `RICONOSCIMENTO_ERRATO` con la traccia, e nessuna è riclassificata come bloccata.
+      - [ ] `PROCEDURE.md` è eseguibile da un altro sviluppatore senza `sudo`, e la misura versionata è una sola.
+
+      ## Blockers
+      None.
+    ref: TASK-10
+  - id: TASK-11
+    title: Tracciabilità eseguibile di RESULT.md verso la misura versionata, in entrambe le direzioni e con la simmetria di AC-7
+    type: Test
+    status: DONE
+    dependencies:
+      - TASK-10
+    body: |-
+      ## Objective
+      `ResultTraceabilityTests` fallisce se una sola riga di `RESULT.md` non trova la sua cella nel JSON versionato, o se una cella rilevante del JSON non ha la sua riga. In particolare fallisce se una cella `NON_SUPPORTABILE` compare fra i punti bloccati, o se l'esito su ADR-007 non ha esattamente un marcatore.
+
+      ## Read
+      - `Spikes/01-scale-memory/Tests/BenchKitTests/ResultTraceabilityTests.swift`: gli helper `section(_:)` e `tableRows(in:header:)`, da **copiare** e adattare, non importare.
+      - `Spikes/04-crash-recovery/RESULT.md` e il JSON in `measurements/`.
+      - `Sources/CrashKit/MeasurementResult.swift`, `CrashPoints.swift` ed `ErrorClassifier.swift`.
+
+      ## Change
+      - File nuovo: `Tests/CrashKitTests/ResultTraceabilityTests.swift`.
+      - Se un controllo fallisce, la correzione va in `RESULT.md`, che deve dire ciò che il JSON dice, e **mai** nel JSON.
+      - **Non-obiettivi:**
+        - nessuna rigenerazione della misura per far tornare il documento;
+        - nessuna tolleranza sui conteggi.
+
+      ## Steps
+      1. Nell'`init`, carica `RESULT.md` e l'**unico** `*.json` di `measurements/`. Se ce n'è più di uno, il test fallisce. Decodifica il JSON con `MeasurementResult`, e ricostruisci l'elenco dei punti con `CrashPoints.enumerate` sulla fixture.
+      2. **Configurazione.** Verifica che:
+         - il `measurementId` sia uguale al nome del file;
+         - § *Configurazione* citi il `measurementId`, il modello e la build di macOS di `host`, e il `fixtureManifestSha256`;
+         - nessuna cella abbia `pointReached == false`.
+      3. **Punti.** Verifica che:
+         - l'insieme degli ID nella prima colonna di § *Punti di interruzione* sia uguale a `points` del JSON e all'enumerazione ricostruita, cioè 61 punti, nello stesso ordine;
+         - per ogni riga, «Esito ripresa» e «Esito compensazione» corrispondano esattamente agli `outcomes` delle celle `<punto>/resume` e `<punto>/compensate`, con tipi e conteggi; si scrive `—` dove la cella non esiste;
+         - «Ripetizioni» sia uguale a `repetitions`;
+         - le colonne di stato corrispondano a `pairs` delle due celle.
+      4. **Compensazione.** Verifica che:
+         - le righe di § *Compensazione* siano in corrispondenza biunivoca con le celle in cui `compensation.attempted` vale `true`;
+         - «Coincide» valga `sì` se e solo se `matchesPre`;
+         - ogni elemento di `fileDeviations` e `directoryMtimeDeviations` compaia come `percorso:campo` nella colonna giusta, e nessuno scostamento non presente nel JSON compaia nella riga.
+      5. **Classi.** Verifica che:
+         - § *Classi di errore* abbia 8 righe, una per `ErrorClass.allCases`;
+         - «Ambito adottato» sia uguale a `ErrorClass.scope`;
+         - «Celle provate» elenchi esattamente le celle di quella classe con `applicable` vero.
+      6. **Bloccati (AC-4).** Verifica che:
+         - le righe di § *Punti bloccati in attesa dell'utente* siano in corrispondenza biunivoca con le celle che hanno almeno una ripetizione `bloccato`;
+         - «Ambito» sia `locale` oppure `sistemico` e coincida con `errorScope`;
+         - «Ragione» non sia vuota;
+         - gli esiti dopo `retry` e `abandon` coincidano con `followUp`.
+      7. **Separazioni (AC-5).** Verifica che:
+         - le righe di § *Separazione di immagine e sidecar* siano in corrispondenza biunivoca con le celle con `separationsAtCrash` non vuoto;
+         - «Rilevata dal recupero» coincida con `separationDetected`.
+      8. **Non supportabili (AC-7), simmetria.** Verifica che:
+         - le righe di § *Esiti non supportabili* siano in corrispondenza biunivoca con le celle che hanno almeno una ripetizione `NON_SUPPORTABILE` o `recognitionError`;
+         - «Motivo» coincida con `reasons`;
+         - **nessun** ID di quelle celle compaia in § *Punti bloccati in attesa dell'utente*, a meno che la stessa cella abbia anche ripetizioni `bloccato`; in quel caso la cella è necessariamente `nonDeterministic`, e il test lo verifica.
+      9. **ADR-007 (AC-6).** Verifica che:
+         - § *Esito su ADR-007* contenga esattamente una occorrenza fra `**confermato**` ed `**emendato**`;
+         - se il marcatore è `**emendato**`, esista `### Testo di sostituzione` con un testo non vuoto;
+         - se il JSON ha almeno una cella con motivo `nessun-esito-applicabile`, la sezione citi almeno uno di quegli ID di cella.
+      10. **Il controllo deve poter fallire.** Un test di controllo applica i controlli dei passi 3, 6 e 8 a copie **alterate in memoria** del documento. Pretende che ciascuna alterazione venga rilevata:
+          - un esito con il conteggio cambiato in una riga di § *Punti di interruzione*;
+          - una cella bloccata rimossa;
+          - una cella `NON_SUPPORTABILE` spostata fra i bloccati.
+
+      ## Verify
+      - Esegui, con timeout 600 s, `swift test --package-path Spikes/04-crash-recovery --filter ResultTraceabilityTests`. Attesa: tutti verdi, compreso il test di controllo.
+      - Esegui, con timeout 900 s, `swift test --package-path Spikes/04-crash-recovery`. Attesa: l'intera suite è verde.
+      - Esegui `swift format lint --strict --recursive Spikes/04-crash-recovery/Tests`. Attesa: stato 0.
+
+      ## Done
+      - [ ] AC-2 — ogni riga di § *Punti di interruzione* combacia con il JSON per esito, ripetizioni e stato, e ogni punto enumerato ha la sua riga.
+      - [ ] AC-3 — § *Compensazione* combacia con il JSON, cella per cella e scostamento per scostamento.
+      - [ ] AC-4 — § *Classi di errore* e § *Punti bloccati in attesa dell'utente* combaciano con il JSON, e ogni cella bloccata ha ambito e ragione.
+      - [ ] AC-5 — § *Separazione di immagine e sidecar* combacia con il JSON.
+      - [ ] AC-6 — l'esito su ADR-007 ha un solo marcatore, e le proposte sono motivate da celle reali.
+      - [ ] AC-7 — la simmetria fra non supportabili e bloccati è verificata, e il test di controllo dimostra che il confronto può fallire.
+
+      ## Blockers
+      None.
+    ref: TASK-11
+  - id: TASK-12
+    title: Wiki - crea la pagina di decisione decisions/recoverable-file-batches con l'esito misurato su ADR-007
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-11
+    body: |-
+      ## Objective
+      La Wiki contiene `decisions/recoverable-file-batches`, una pagina `type: decision` che registra come conoscenza durevole la semantica di recupero dei lotti di operazioni su file chiusa da questo cancello. Comprende l'insieme di esiti, la classificazione degli errori, i punti legittimamente bloccati, le regole di riconoscimento e gli scostamenti dichiarati, ciascuno con il valore misurato.
+
+      ## Read
+      - `.claude/skills/archetipo-wiki/references/wiki-contract.md`, righe 74-101: il contratto delle pagine `type: decision`, cioè frontmatter, `decision_status`, i cinque marcatori di sezione e l'evidenza di repository obbligatoria in `sources`.
+      - `docs/wiki/decisions/work-admission-budget.md`: l'unica pagina di decisione esistente, come modello di forma, tono e attribuzione all'hardware.
+      - `Spikes/04-crash-recovery/RESULT.md`: tutte le sezioni.
+      - `docs/wiki/architecture/context-map.md`: le aree *Operazioni su file* e *Stato durevole*, e la sezione *Incertezze*.
+      - `docs/wiki/index.md`, per vedere come il catalogo raggruppa i concetti. **Non va modificato a mano.**
+
+      ## Change
+      - File nuovo: `docs/wiki/decisions/recoverable-file-batches.md`.
+      - `docs/wiki/index.md`: **solo** tramite `archetipo wiki catalog`.
+      - **Non-obiettivi:**
+        - nessun `wiki reset`, perché la pagina non esiste ancora;
+        - non toccare le altre pagine, che hanno un task ciascuna;
+        - non modificare `docs/PRD.md`;
+        - non segnare come `superseded` `decisions/work-admission-budget`, che è una decisione diversa.
+
+      ## Steps
+      1. Crea `docs/wiki/decisions/recoverable-file-batches.md` con questo frontmatter:
+         - `type: decision`;
+         - `title: Lotti di operazioni su file recuperabili con esiti dichiarati`;
+         - `description:` una riga che nomina l'esito su ADR-007 (confermato o emendato), l'insieme di esiti risultante e la classificazione per ambito;
+         - `decision_status: accepted`;
+         - `status: generated`;
+         - `sources:` con evidenza di repository reale:
+
+           | Percorso | `role` |
+           |---|---|
+           | `Spikes/04-crash-recovery/RESULT.md` | `verification` |
+           | il file di `Spikes/04-crash-recovery/measurements/` | `verification` |
+           | `Spikes/04-crash-recovery/Sources/CrashKit/OutcomeClassifier.swift` | `implementation` |
+           | `Spikes/04-crash-recovery/Sources/CrashKit/ErrorClassifier.swift` | `implementation` |
+
+           `docs/PRD.md` non va citato come implementazione.
+      2. Dopo il titolo, scrivi un paragrafo d'attribuzione: la fonte è `Spikes/04-crash-recovery/RESULT.md`, e ogni esito vale per la configurazione dichiarata in § *Configurazione* di quel documento, cioè volume APFS locale su immagine disco e arresto del processo per `SIGKILL`.
+      3. Scrivi il corpo sotto i cinque marcatori obbligatori, nell'ordine del contratto, ciascuno con contenuto sostanziale.
+         - **`<!-- archetipo:wiki section=context -->`** — le forze in gioco:
+           - il filesystem non offre transazioni su più file;
+           - ADR-007 era provvisorio (ADR-015);
+           - la revisione 1.3 del PRD aveva sostituito «ripreso o compensato» con cinque esiti, senza alcuna misura;
+           - «bloccato in attesa dell'utente» richiede che l'utente lo sappia.
+
+           Se ADR-007 è **emendato**, la sezione dice esplicitamente che questa pagina **sostituisce** la formulazione di ADR-007 nel PRD 1.3 (`docs/PRD.md`, riga 530), e che il PRD non è stato modificato.
+         - **`<!-- archetipo:wiki section=decision -->`** — la decisione **con i valori misurati** presi da `RESULT.md`:
+           - l'insieme degli esiti adottato;
+           - la tabella delle otto classi di errore, con l'ambito confermato o corretto;
+           - le celle legittimamente bloccate, con la ragione;
+           - le regole di riconoscimento: il disco prevale sul log, il Cestino si cerca per digest, una compensazione avviata non si rovescia, il volume si identifica dall'UUID;
+           - gli scostamenti che una compensazione lascia e che vanno dichiarati all'utente.
+
+           Riporta i fatti misurati, non descrizioni qualitative.
+         - **`<!-- archetipo:wiki section=alternatives -->`** — almeno tre alternative reali, ciascuna con la prova dello scarto presa dalla misura o dalla sonda:
+           - **lotto atomico:** non esiste una transazione su più file;
+           - **esito binario «ripreso o compensato»:** citare le celle in cui nessuna delle due strade era percorribile;
+           - **classificazione per errno:** `ENOENT` dopo l'espulsione del volume è identico a quello di un file scomparso;
+           - **fidarsi del log per lo stato:** il nome con suffisso orario nel Cestino e il record troncato.
+         - **`<!-- archetipo:wiki section=consequences -->`** — vantaggi, svantaggi e implicazioni operative per la Tappa 3:
+           - ogni passo va progettato idempotente e osservabile dal disco;
+           - il registro deve tollerare un record troncato;
+           - gli esiti fanno parte dell'interfaccia;
+           - gli scostamenti di una compensazione vanno dichiarati all'utente.
+
+           Includi i **limiti di attribuzione**:
+           - `SIGKILL` non equivale a una perdita di alimentazione;
+           - è stato provato un solo tipo di volume;
+           - il contratto di durabilità di `DurableState` (ADR-003) non è provato da questo cancello.
+         - **`<!-- archetipo:wiki section=verification -->`** — cita `Spikes/04-crash-recovery/RESULT.md`, il file di `measurements/`, i comandi `crashbench run-matrix`, `run --crash-at` e `recover`, e le suite `RecoveryScenarioTests` e `ResultTraceabilityTests`.
+      4. In fondo, aggiungi `## Concetti collegati` con questi collegamenti Markdown:
+         - [Mappa dei contesti](/architecture/context-map.md);
+         - [Sviluppo e operatività](/operations/development.md);
+         - [PRD di iMAGE Surfer](/references/prd.md).
+      5. Ricostruisci il catalogo con `archetipo wiki --project-root /Users/gia/iMAGE_Surfer catalog`. Non scrivere né riformattare `index.md` o `log.md` a mano.
+
+      ## Verify
+      - Esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer validate`. Attesa: `ok: true`, 7 pagine, nessun rilievo `error`.
+      - Esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer status --require-generated decisions/recoverable-file-batches`. Attesa: stato 0.
+      - Esegui `grep -c "archetipo:wiki section=" docs/wiki/decisions/recoverable-file-batches.md`. Attesa: `5`.
+      - Esegui `grep -q "decision_status: accepted" docs/wiki/decisions/recoverable-file-batches.md && echo ok-status`. Attesa: `ok-status`.
+      - Esegui `git diff --stat docs/wiki/index.md`. Attesa: `index.md` modificato dalla CLI, con una voce per la nuova pagina.
+
+      ## Done
+      - [ ] `docs/wiki/decisions/recoverable-file-batches.md` esiste con `type: decision`, `decision_status: accepted`, `status: generated` e i cinque marcatori, tutti con contenuto sostanziale.
+      - [ ] Il cambiamento di conoscenza è registrato: ADR-007 passa da ipotesi provvisoria del PRD a decisione chiusa con esiti misurati, presi da `RESULT.md`.
+      - [ ] `sources` cita evidenza di repository reale (`RESULT.md`, la misura, `OutcomeClassifier.swift`, `ErrorClassifier.swift`) e non cita `docs/PRD.md` come implementazione.
+      - [ ] La sezione `consequences` dichiara i limiti di attribuzione.
+      - [ ] `archetipo wiki validate` restituisce `ok: true`, la pagina è `generated`, e `index.md` è aggiornato dalla CLI.
+
+      ## Blockers
+      None.
+    ref: TASK-12
+  - id: TASK-13
+    title: Wiki - aggiorna overview con il secondo banco dei cancelli e ADR-007 chiuso dal cancello n°4
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-12
+    body: |-
+      ## Objective
+      La pagina `overview` smette di dire che il solo codice Swift del repository è il banco del cancello n°1, e che ADR-007 è ancora aperto. Riporta il banco del cancello n°4 come materiale di verifica usa-e-getta, e l'esito su ADR-007 con il rimando alla pagina di decisione.
+
+      ## Read
+      - `docs/wiki/overview.md`, in particolare:
+        - § *Stack*: la frase «Nel repository esiste però codice Swift: il banco di misura del cancello tecnico n°1», la frase «È il primo codice del repository» e la riga *Test* della tabella;
+        - § *Ambito della mappa ed esclusioni*: «Gli altri tre cancelli restano aperti, e con loro gli ADR-007, 011, 012 e 013»;
+        - il frontmatter `sources`.
+      - `Spikes/04-crash-recovery/README.md` e `RESULT.md` § *Esito su ADR-007*.
+      - `docs/wiki/decisions/recoverable-file-batches.md`.
+
+      ## Change
+      - `docs/wiki/overview.md`: solo le frasi e le righe elencate qui sotto, più il frontmatter `sources`.
+      - **Non-obiettivi:**
+        - non riscrivere le sezioni *Scopo* e *Attori*;
+        - non modificare a mano il blocco `review` del frontmatter: si usa `archetipo wiki reset`.
+
+      ## Steps
+      1. **Primo passo:** esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer reset overview`.
+      2. Aggiungi a `sources` la voce `- path: Spikes/04-crash-recovery` con `role: implementation`. Lascia le altre voci.
+      3. In § *Stack*:
+         - dì che nel repository esistono **due** pacchetti Swift di verifica, `Spikes/01-scale-memory/` (cancello n°1) e `Spikes/04-crash-recovery/` (cancello n°4), entrambi dichiaratamente usa-e-getta, e che continua a non esistere codice di prodotto;
+         - nella riga *Test*, colonna «Stato nel repository», dì che l'iniezione di arresti su un lotto esiste come banco del cancello n°4 (`crashbench`, suite `CrashKitTests`), eseguito a mano e **non** in una pipeline;
+         - nella riga *Test*, lascia «assente» per XCUITest, per la CI e per il corpus di file malformati.
+      4. In § *Ambito della mappa ed esclusioni*:
+         - aggiungi l'esito del cancello n°4: ADR-007 **confermato** oppure **emendato**, come in `RESULT.md`, con il collegamento [Lotti di operazioni su file recuperabili con esiti dichiarati](/decisions/recoverable-file-batches.md);
+         - correggi la frase sui cancelli aperti: restano aperti i cancelli n°2 e n°3, e con loro ADR-011, 012 e 013.
+      5. In `## Concetti collegati`, aggiungi il collegamento alla nuova pagina di decisione.
+      6. Se il `description` del frontmatter non è più esatto, aggiornalo ed esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer catalog`. Altrimenti lascialo invariato.
+
+      ## Verify
+      - Esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer status --require-generated overview`. Attesa: stato 0.
+      - Esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer validate`. Attesa: `ok: true`, nessun rilievo `error`.
+      - Esegui `grep -c "04-crash-recovery" docs/wiki/overview.md`. Attesa: almeno 2, cioè `sources` e corpo.
+      - Esegui `grep -n "Gli altri tre cancelli restano aperti" docs/wiki/overview.md`. Attesa: nessun output.
+
+      ## Done
+      - [ ] La pagina `overview` registra il cambiamento di conoscenza: il repository ha due banchi di verifica, e nessun codice di prodotto; l'iniezione di arresti esiste come banco e non come CI; ADR-007 è chiuso dal cancello n°4, con l'esito di `RESULT.md`.
+      - [ ] Evidenza: `sources` cita `Spikes/04-crash-recovery`, e il corpo rimanda a `decisions/recoverable-file-batches`.
+      - [ ] `archetipo wiki status` riporta `overview` con `state: generated`.
+
+      ## Blockers
+      None.
+    ref: TASK-13
+  - id: TASK-14
+    title: Wiki - aggiorna engineering/code-map con il pacchetto Spikes/04-crash-recovery fuori dalla mappa dei domini
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-12
+    body: |-
+      ## Objective
+      La pagina `engineering/code-map` smette di dire che il repository contiene un solo pacchetto Swift. Elenca `Spikes/04-crash-recovery/` fra il codice non mappato, cioè come banco di verifica usa-e-getta fuori dai domini. La nota della voce di copertura `Spikes` resta coerente, e la validazione `bootstrap` resta verde.
+
+      ## Read
+      - `docs/wiki/engineering/code-map.md`, in particolare:
+        - la frase «un solo pacchetto Swift: `Spikes/01-scale-memory/`»;
+        - le sezioni *Codice condiviso*, *Codice non mappato* e *Copertura*;
+        - la `note` della voce `coverage` («oggi il solo Spikes/01-scale-memory»).
+      - `.claude/skills/archetipo-wiki/references/wiki-contract.md`, § *Deterministic coverage*.
+      - `Spikes/04-crash-recovery/README.md`.
+      - Il risultato corrente di `archetipo wiki --project-root /Users/gia/iMAGE_Surfer inspect`.
+
+      ## Change
+      - `docs/wiki/engineering/code-map.md`: frasi, sezioni e frontmatter elencati qui sotto.
+      - **Non-obiettivi:**
+        - nessuna riga nella tabella dei domini, che resta vuota: il banco non è codice di prodotto;
+        - nessuna voce `coverage` di tipo `capability`;
+        - non modificare a mano il blocco `review`.
+
+      ## Steps
+      1. **Primo passo:** esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer reset engineering/code-map`.
+      2. Esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer inspect`.
+         - Verifica che restituisca ancora un solo confine, `Spikes`, e `capability_candidates: []`.
+         - Se l'inventario è diverso, fermati e riporta la differenza come blocco: la copertura va riprogettata, non adattata.
+      3. Aggiungi a `sources` la voce `- path: Spikes/04-crash-recovery` con `role: implementation`.
+      4. Lascia la voce `coverage` come `kind: boundary`, `path: Spikes`, `status: excluded`. Aggiorna solo la `note`: banco di verifica usa-e-getta dei cancelli tecnici, oggi `Spikes/01-scale-memory` (cancello n°1) e `Spikes/04-crash-recovery` (cancello n°4); la conoscenza durevole sta in `decisions/work-admission-budget` e in `decisions/recoverable-file-batches`.
+      5. Correggi le sezioni del corpo.
+         - **§ *Da dominio a codice*:** sostituisci «un solo pacchetto Swift» con i due pacchetti di verifica, ciascuno con il proprio cancello.
+         - **§ *Codice condiviso*:** nessun codice condiviso fra i due banchi. Ciascuno ha la propria libreria, `BenchKit` e `CrashKit`, e il banco n°4 non dipende dal n°1.
+         - **§ *Codice non mappato*:** aggiungi la voce `Spikes/04-crash-recovery/`, che comprende:
+           - la libreria `CrashKit`: volume di lavoro, istantanea, log di intenti, passi idempotenti, classificatori, recupero e matrice;
+           - l'eseguibile `crashbench`;
+           - la suite `CrashKitTests`;
+           - le fixture versionate.
+
+           Aggiungi che è deliberatamente fuori dalla mappa dei domini e che la decisione durevole è [Lotti di operazioni su file recuperabili con esiti dichiarati](/decisions/recoverable-file-batches.md).
+         - **§ *Copertura*:** riallinea il numero di file e i campioni all'output corrente di `inspect`, e cita entrambi i banchi.
+      6. In `## Concetti collegati`, aggiungi il collegamento alla nuova pagina di decisione.
+      7. Se il `description` del frontmatter («l'unico codice del repository è il banco di misura usa-e-getta del cancello n°1») non è più esatto, aggiornalo ed esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer catalog`.
+
+      ## Verify
+      - Esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer validate --profile bootstrap`. Attesa: `ok: true`, nessun rilievo `error`, in particolare nessun `WIKI_UNCOVERED_BOUNDARY`.
+      - Esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer status --require-generated engineering/code-map`. Attesa: stato 0.
+      - Esegui `grep -n "un solo pacchetto Swift" docs/wiki/engineering/code-map.md`. Attesa: nessun output.
+
+      ## Done
+      - [ ] La pagina `engineering/code-map` registra il cambiamento di conoscenza: i pacchetti di verifica sono due, entrambi fuori dalla mappa dei domini, e la tabella dei domini resta vuota per costruzione.
+      - [ ] Evidenza: `sources` cita `Spikes/04-crash-recovery`, e la nota di copertura del confine `Spikes` nomina entrambi i banchi.
+      - [ ] `validate --profile bootstrap` resta verde, e `archetipo wiki status` riporta la pagina con `state: generated`.
+
+      ## Blockers
+      None.
+    ref: TASK-14
+  - id: TASK-15
+    title: Wiki - aggiorna operations/development con toolchain, prerequisiti ed esito del cancello n°4
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-12
+    body: |-
+      ## Objective
+      La pagina `operations/development` documenta come si costruisce, si testa e si esegue il banco del cancello n°4, con il prerequisito `diskutil image` e nessun `sudo`. Segna il cancello n°4 come concluso, con l'esito su ADR-007, e distingue la suite esistente dal test di iniezione di arresti «a ogni push» che il PRD prescrive e che resta da costruire.
+
+      ## Read
+      - `docs/wiki/operations/development.md`, in particolare:
+        - § *Stato attuale*: la toolchain dei cancelli, la tabella dei quattro cancelli e la frase sul materiale non versionabile;
+        - § *Test previsti*: «La prima suite reale del repository è `BenchKitTests`» e la voce dei test di iniezione di arresti;
+        - il frontmatter `sources`.
+      - `Spikes/04-crash-recovery/PROCEDURE.md` e `RESULT.md`, § *Configurazione* e § *Esito su ADR-007*.
+
+      ## Change
+      - `docs/wiki/operations/development.md`: solo le parti elencate qui sotto, più `sources`.
+      - **Non-obiettivi:**
+        - non dichiarare l'esistenza di una CI, che resta assente;
+        - non modificare a mano il blocco `review`.
+
+      ## Steps
+      1. **Primo passo:** esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer reset operations/development`.
+      2. Aggiungi a `sources` la voce `- path: Spikes/04-crash-recovery` con `role: implementation`.
+      3. Aggiorna § *Stato attuale*.
+         - **Toolchain dei cancelli.** Aggiungi i comandi del banco n°4, lanciati dalla radice del repository:
+
+           ```sh
+           swift build --package-path Spikes/04-crash-recovery
+           swift test  --package-path Spikes/04-crash-recovery
+           Spikes/04-crash-recovery/.build/debug/crashbench setup
+           Spikes/04-crash-recovery/.build/debug/crashbench run-matrix --profile full
+           ```
+
+           Aggiungi il rimando a `Spikes/04-crash-recovery/PROCEDURE.md`, e il prerequisito: un'immagine disco APFS creata con `diskutil image`, senza `sudo` e senza `hdiutil`, che su macOS 27.2 è deprecato. Il Cestino usato è quello del volume di lavoro, non quello dell'utente.
+         - **Tabella dei cancelli.** La riga 4 diventa **concluso**: esito in `Spikes/04-crash-recovery/RESULT.md`, ADR-007 **confermato** oppure **emendato**, come in `RESULT.md`, con il collegamento [Lotti di operazioni su file recuperabili con esiti dichiarati](/decisions/recoverable-file-batches.md).
+         - **Materiale non versionabile.** La frase resta vera per i cancelli 1 e 2. Aggiungi che il materiale del cancello 4 è versionato: fixture del lotto e misura in `measurements/`.
+      4. Aggiorna § *Test previsti*.
+         - Nello *Stato reale* dì che le suite reali sono due: `BenchKitTests` e `CrashKitTests`. Per la seconda elenca cosa copre:
+           - idempotenza dei passi;
+           - classificazione degli errori su errori reali;
+           - raggiungibilità dei cinque esiti, asserita sull'istantanea;
+           - arresto per `SIGKILL` sul binario reale;
+           - tracciabilità di `RESULT.md`.
+         - Nella voce *Test di iniezione di arresti … eseguiti a ogni push* dì che il meccanismo esiste come banco del cancello, eseguito a mano, e che la sua esecuzione a ogni push resta una prescrizione del PRD per la Tappa 3, fuori dall'ambito del cancello.
+      5. Se il `description` del frontmatter («esiste la sola toolchain SwiftPM del banco di misura del cancello n°1») non è più esatto, aggiornalo ed esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer catalog`.
+
+      ## Verify
+      - Esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer status --require-generated operations/development`. Attesa: stato 0.
+      - Esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer validate`. Attesa: `ok: true`, nessun rilievo `error`.
+      - Esegui `grep -c "04-crash-recovery" docs/wiki/operations/development.md`. Attesa: almeno 3.
+
+      ## Done
+      - [ ] La pagina `operations/development` registra il cambiamento di conoscenza: toolchain e prerequisiti del banco n°4, cancello n°4 concluso con l'esito su ADR-007, due suite reali, e l'iniezione di arresti a ogni push ancora prescritta e non costruita.
+      - [ ] Evidenza: `sources` cita `Spikes/04-crash-recovery`, e il corpo rimanda a `PROCEDURE.md`, `RESULT.md` e alla pagina di decisione.
+      - [ ] `archetipo wiki status` riporta `operations/development` con `state: generated`.
+
+      ## Blockers
+      None.
+    ref: TASK-15
+  - id: TASK-16
+    title: Wiki - aggiorna architecture/context-map con l'area Operazioni su file misurata e ADR-007 fuori dagli ADR provvisori
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-12
+    body: |-
+      ## Objective
+      La pagina `architecture/context-map` registra quattro cambiamenti:
+      - l'area prevista *Operazioni su file* non ha codice di prodotto, ma ha una semantica di recupero **misurata e chiusa** dal cancello n°4;
+      - l'area *Stato durevole* resta senza evidenza, e il cancello non ne prova il contratto;
+      - gli ADR provvisori scendono da quattro a tre;
+      - la descrizione della pagina è coerente con tutto questo.
+
+      ## Read
+      - `docs/wiki/architecture/context-map.md`, in particolare:
+        - le righe *Operazioni su file* e *Stato durevole* della tabella delle aree;
+        - § *Incertezze*, la voce «Quattro ADR restano provvisori»;
+        - il `description` del frontmatter.
+      - `Spikes/04-crash-recovery/RESULT.md`: § *Esito su ADR-007*, § *Classi di errore* e § *Limiti dichiarati*.
+      - `docs/wiki/decisions/recoverable-file-batches.md`.
+
+      ## Change
+      - `docs/wiki/architecture/context-map.md`: solo le parti elencate qui sotto.
+      - **Non-obiettivi:**
+        - nessuna nuova area;
+        - nessun nome di relazione DDD;
+        - le altre righe della tabella restano invariate;
+        - non modificare a mano il blocco `review`.
+
+      ## Steps
+      1. **Primo passo:** esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer reset architecture/context-map`. La pagina oggi è `evidence-changed`, e dopo il reset diventa `generated`.
+      2. Aggiorna la riga *Operazioni su file*.
+         - **Responsabilità attesa:** allineala a `RESULT.md`. Se ADR-007 è emendato, riporta l'insieme di esiti e la classificazione per ambito adottati.
+         - **Evidenza attuale:** «nessun codice di prodotto, ma una **semantica di recupero misurata e chiusa** dal cancello n°4: [Lotti di operazioni su file recuperabili con esiti dichiarati](/decisions/recoverable-file-batches.md)». È lo stesso schema della riga *Ammissione del lavoro*.
+      3. Aggiorna la riga *Stato durevole*. L'evidenza resta «nessuna», con una precisazione: il cancello n°4 ha usato un registro sostitutivo (JSONL con `F_FULLFSYNC`) e **non** prova il contratto operativo di durabilità di ADR-003.
+      4. In § *Incertezze*, la voce sugli ADR provvisori diventa: «**Tre ADR restano provvisori**». ADR-009 è chiuso dal cancello n°1, e ADR-007 è chiuso dal cancello n°4, con l'esito di `RESULT.md` e il collegamento alla pagina di decisione. Restano subordinati ai cancelli n°2 e n°3 ADR-011, 012 e 013.
+      5. Aggiorna il `description` del frontmatter da «quattro ADR restano provvisori» a una formulazione esatta: ADR-009 e ADR-007 chiusi dai cancelli n°1 e n°4, tre ADR provvisori. Poi esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer catalog`.
+      6. In `## Concetti collegati`, aggiungi il collegamento alla nuova pagina di decisione.
+
+      ## Verify
+      - Esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer status --require-generated architecture/context-map`. Attesa: stato 0.
+      - Esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer validate`. Attesa: `ok: true`, nessun rilievo `error`.
+      - Esegui `grep -n "Quattro ADR restano provvisori\|quattro ADR restano provvisori" docs/wiki/architecture/context-map.md`. Attesa: nessun output.
+      - Esegui `git diff docs/wiki/index.md`. Attesa: la descrizione aggiornata compare nel catalogo, scritta dalla CLI.
+
+      ## Done
+      - [ ] La pagina `architecture/context-map` registra il cambiamento di conoscenza: *Operazioni su file* ha una semantica di recupero misurata; *Stato durevole* resta senza evidenza, con il limite dichiarato; gli ADR provvisori sono tre.
+      - [ ] Evidenza: il corpo rimanda a `decisions/recoverable-file-batches`, e i valori sono quelli di `RESULT.md`.
+      - [ ] `archetipo wiki status` riporta `architecture/context-map` con `state: generated`, non più `evidence-changed`.
+
+      ## Blockers
+      None.
+    ref: TASK-16
+  - id: TASK-17
+    title: Cancello finale - suite completa, stile, ambito, dimostrazione sul binario reale, Wiki e verifica che ogni task sia DONE prima della revisione
+    type: Test
+    status: DONE
+    dependencies:
+      - TASK-01
+      - TASK-02
+      - TASK-03
+      - TASK-04
+      - TASK-05
+      - TASK-06
+      - TASK-07
+      - TASK-08
+      - TASK-09
+      - TASK-10
+      - TASK-11
+      - TASK-12
+      - TASK-13
+      - TASK-14
+      - TASK-15
+      - TASK-16
+    body: |-
+      ## Objective
+      Una sola esecuzione di controlli dimostra:
+      - che tutti e sette i criteri di accettazione hanno evidenza verde;
+      - che il pacchetto non ha diagnostiche nuove;
+      - che nessun file di Spike 01 o del PRD è cambiato;
+      - che il percorso di `Dimostra` funziona sul binario reale;
+      - che le cinque pagine Wiki richieste sono `generated` e la Wiki è valida.
+
+      Solo dopo questi controlli e la verifica che ogni task sia `DONE`, la spec può andare in revisione.
+
+      ## Read
+      - Questo piano: § *Baseline*, cioè le soglie e i comandi già rossi o assenti, e § *Mappa delle evidenze di accettazione*.
+      - `Spikes/04-crash-recovery/RESULT.md` e `PROCEDURE.md`.
+
+      ## Change
+      - Nessun file.
+      - Se un controllo fallisce, il task resta `TODO`, e il difetto si corregge nel task che possiede il file, rieseguendone la verifica.
+      - **Non-obiettivi:**
+        - nessuna rigenerazione della misura;
+        - nessuna invocazione di `xcodebuild` o `swiftlint`, assenti per baseline.
+
+      ## Steps
+      1. Esegui, nell'ordine, tutti i comandi di § *Verify*, da `/Users/gia/iMAGE_Surfer`.
+      2. Se tutti danno l'atteso, marca **questo** task `DONE`, eseguendo da `/Users/gia/iMAGE_Surfer` `archetipo task done US-004 TASK-17`.
+      3. Ricarica la spec: `archetipo spec show US-004`.
+      4. Verifica che **nessun** task abbia `status: TODO`.
+      5. Solo a quel punto chiedi la revisione con `archetipo spec review US-004`.
+
+      ## Verify
+      - **Build.** Esegui `swift build --package-path Spikes/04-crash-recovery`. Attesa: `Build complete!`, senza errori né avvisi del compilatore. Gli avvisi del linker `search path ... not found` sono preesistenti e innocui.
+      - **Suite completa.** Esegui, con un timeout di almeno 900 s, `swift test --package-path Spikes/04-crash-recovery`. Attesa: tutte le suite verdi. Sono comprese `FixtureTests`, `WorkVolumeTests`, `SnapshotTests`, `IntentLogTests`, `StepTests`, `ErrorClassifierTests`, `CrashPointsTests`, `BatchExecutorTests`, `OutcomeClassifierTests`, `RecognizerTests`, `RecoveryScenarioTests`, `CrashbenchIntegrationTests` e `ResultTraceabilityTests`.
+      - **Stile.** Esegui `swift format lint --strict --recursive Spikes/04-crash-recovery/Package.swift Spikes/04-crash-recovery/Sources Spikes/04-crash-recovery/Tests`. Attesa: stato 0, nessun rilievo.
+      - **Fixture.** Esegui `Spikes/04-crash-recovery/.build/debug/crashbench verify-fixtures; echo "stato $?"`. Attesa: `stato 0`.
+      - **Punti.** Esegui `Spikes/04-crash-recovery/.build/debug/crashbench list-points | wc -l`. Attesa: `61`.
+      - **Dimostrazione sul binario reale (AC-1, AC-2, AC-5).** Esegui:
+
+        ```sh
+        B=Spikes/04-crash-recovery/.build/debug/crashbench
+        $B setup; $B run --crash-at S03-c; echo "stato $?"; $B recover --strategy resume; $B teardown
+        ```
+
+        Attesa:
+        - `ARRESTO S03-c`;
+        - `stato 137`;
+        - `SEPARAZIONI-ALL-AVVIO OP2`;
+        - `ESITO completato`;
+        - cinque righe `COPPIA`.
+      - **Nessun volume rimasto montato.** Esegui `mount | grep -c "04-crash-recovery/.data"`. Attesa: `0`.
+      - **Dati esclusi (AC-1).** Esegui `git check-ignore -q Spikes/04-crash-recovery/.data && git check-ignore -q Spikes/04-crash-recovery/runs && echo "dati esclusi"`. Attesa: `dati esclusi`.
+      - **File versionabili (AC-1, AC-2).** Esegui `git ls-files --cached --others --exclude-standard Spikes/04-crash-recovery | grep -cE "^Spikes/04-crash-recovery/(fixtures/|measurements/|RESULT.md|PROCEDURE.md|README.md|Package.swift)"`. Attesa: almeno 17, cioè 12 file di fixture, 1 misura e 4 documenti o manifest. Nessun percorso sotto `.data/` o `runs/`.
+      - **Spike 01 intatto.** Esegui `git diff --name-only 10ec6ad -- Spikes/01-scale-memory; git status --porcelain -- Spikes/01-scale-memory`. Attesa: nessun output.
+      - **PRD intatto.** Esegui `git diff --name-only 10ec6ad -- docs/PRD.md; git status --porcelain -- docs/PRD.md`. Attesa: nessun output.
+      - **Ambito della Wiki.** Esegui `git diff --name-only 10ec6ad -- docs; git ls-files --others --exclude-standard -- docs`. Attesa: solo questi file:
+        - `docs/wiki/overview.md`;
+        - `docs/wiki/engineering/code-map.md`;
+        - `docs/wiki/operations/development.md`;
+        - `docs/wiki/architecture/context-map.md`;
+        - `docs/wiki/decisions/recoverable-file-batches.md`;
+        - `docs/wiki/index.md`;
+        - e, se la CLI lo ha scritto, `docs/wiki/log.md`.
+      - **Wiki valida.** Esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer validate --profile bootstrap`. Attesa: `data.ok: true`, 7 pagine, nessun rilievo di severità `error`.
+      - **Pagine richieste `generated`.** Esegui `archetipo wiki --project-root /Users/gia/iMAGE_Surfer status --require-generated overview,engineering/code-map,operations/development,architecture/context-map,decisions/recoverable-file-batches`. Attesa: stato 0, e nessuna delle cinque pagine `stale` o `attention`.
+      - **Esito su ADR-007 (AC-6).** Esegui `grep -cE "ADR-007: \*\*(confermato|emendato)\*\*" Spikes/04-crash-recovery/RESULT.md`. Attesa: `1`.
+      - **Nessun task rimasto aperto.** Esegui, dopo aver marcato questo task `DONE`, `archetipo spec show US-004`. Attesa: nessun task con `status: TODO`; tutti i task da TASK-01 a TASK-17 sono `DONE`.
+
+      ## Done
+      - [ ] AC-1 — `verify-fixtures` esce con 0; `list-points` stampa 61 punti; l'arresto a `S03-c` dà stato 137; `.data` e `runs` sono esclusi, e fixture e misura sono versionabili.
+      - [ ] AC-2 — `ResultTraceabilityTests` e `RecoveryScenarioTests` sono verdi, e la dimostrazione stampa esito e posizioni.
+      - [ ] AC-3 — `ResultTraceabilityTests` (§ *Compensazione*) e lo scenario `compensato` di `RecoveryScenarioTests` sono verdi.
+      - [ ] AC-4 — `ErrorClassifierTests` e `ResultTraceabilityTests` (§ *Classi di errore*, § *Punti bloccati in attesa dell'utente*) sono verdi.
+      - [ ] AC-5 — `CrashbenchIntegrationTests` e `ResultTraceabilityTests` (§ *Separazione di immagine e sidecar*) sono verdi, e la dimostrazione stampa `SEPARAZIONI-ALL-AVVIO OP2`.
+      - [ ] AC-6 — `RESULT.md` contiene uno e un solo marcatore di esito su ADR-007, verificato anche da `ResultTraceabilityTests`.
+      - [ ] AC-7 — `OutcomeClassifierTests` e la simmetria di `ResultTraceabilityTests` sono verdi.
+      - [ ] Nessuna diagnostica del compilatore, `swift format lint --strict` a 0, nessun volume rimasto montato, `xcodebuild` e `swiftlint` non invocati.
+      - [ ] Ambito: Spike 01 e `docs/PRD.md` sono intatti, e sotto `docs/` sono cambiate solo le pagine Wiki del contratto e il catalogo.
+      - [ ] Wiki: `validate --profile bootstrap` restituisce `ok: true`, e le cinque pagine richieste sono `generated`.
+      - [ ] Ordine rispettato: controlli eseguiti, questo task marcato `DONE`, `archetipo spec show US-004` ricaricato, nessun task `TODO`, e solo allora `archetipo spec review US-004`.
+
+      ## Blockers
+      None.
+    ref: TASK-17

@@ -6,5 +6,5 @@ epics:
 order:
   - US-002
   - US-003
-  - US-004
   - US-001
+  - US-004
