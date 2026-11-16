@@ -3,6 +3,7 @@ code: US-004
 title: Cancello 4 - stabilire per iniezione di arresti quale dei cinque esiti si raggiunge
 epic:
   code: EP-001
+  title: Tappa 0 - Cancelli tecnici
 priority: HIGH
 points: 5
 status: TODO

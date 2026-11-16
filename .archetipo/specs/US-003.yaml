@@ -3,6 +3,7 @@ code: US-003
 title: Cancello 3 - verificare il round-trip XMP su strumenti reali e uno scrittore non coordinato
 epic:
   code: EP-001
+  title: Tappa 0 - Cancelli tecnici
 priority: HIGH
 points: 5
 status: TODO

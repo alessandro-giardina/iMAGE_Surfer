@@ -6,7 +6,7 @@ epic:
   title: Tappa 0 - Cancelli tecnici
 priority: HIGH
 points: 5
-status: TODO
+status: REVIEW
 scope: MVP
 body: |-
   Come Leonardo, architetto di iMAGE Surfer,
@@ -40,3 +40,9 @@ body: |-
 history:
   - status: TODO
     at: "2026-08-26T13:23:00Z"
+  - status: PLANNED
+    at: "2026-08-26T13:58:55Z"
+  - status: IN PROGRESS
+    at: "2026-11-13T09:40:04Z"
+  - status: REVIEW
+    at: "2026-11-14T02:26:53Z"

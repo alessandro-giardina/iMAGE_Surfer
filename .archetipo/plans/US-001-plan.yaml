@@ -1,0 +1,1103 @@
+schema: archetipo/plan/v2
+spec_code: US-001
+body: |-
+  # US-001: Cancello 1 - misurare scala e memoria su 50.000 file e chiudere ADR-009 — Piano di implementazione
+
+  **Generato da:** Team di pianificazione ARchetipo
+  **Data:** 2026-08-26
+
+  ---
+
+  ## Spec
+
+  **Epica:** EP-001 — Tappa 0 - Cancelli tecnici
+  **Priorità:** HIGH | **Punti:** 5 | **Ambito:** MVP
+
+  **Storia utente**
+
+  Come Leonardo, architetto di iMAGE Surfer, voglio misurare su hardware dichiarato il comportamento in latenza e in memoria di una cartella da 50.000 immagini, e derivarne le stime di costo e l'ampiezza della banda di ritenzione, così che ADR-009 - e con esso NFR-P1, NFR-P9 e NFR-P10 - sia confermato oppure emendato con numeri misurati, prima che venga scritta una riga del pacchetto che ne dipende.
+
+  **Criteri di accettazione**
+
+  - AC-1 — `Spikes/01-scale-memory/` con procedura di generazione del dataset eseguibile da un altro sviluppatore; insieme da 50.000 file segmentato per formato e classe di risoluzione; procedura e configurazione versionate, file generati no.
+  - AC-2 — `RESULT.md` dichiara l'hardware di misura (modello, memoria, tipo di disco) e attribuisce ogni cifra a quella configurazione.
+  - AC-3 — `RESULT.md` riporta tempo alla prima schermata su 3.000 immagini, latenza dello spostamento della selezione sotto lavoro in sottofondo, occupazione di picco su 50.000 con scorrimento continuo, e andamento in sessione di lunga durata; ciascuna con ripetizioni e dispersione.
+  - AC-4 — Tabella di stime di costo in memoria per tipo di lavoro × formato × classe di risoluzione, con margine di sicurezza e limite per singolo elemento per riga, ricondotta alla misura che la calibra.
+  - AC-5 — Ampiezza della banda di ritenzione con soglie distinte di entrata e uscita, motivata dal costo di ricalcolo misurato di un piccolo movimento di scorrimento.
+  - AC-6 — Esito su ADR-009, NFR-P1, NFR-P9, NFR-P10: **confermato** oppure **emendato** con testo di sostituzione e valori misurati.
+  - AC-7 — Una soglia non raggiungibile è registrata come **non supportabile** con la misura che lo dimostra e la modifica proposta; l'esito chiude il cancello senza ripetere la misura su altra configurazione.
+
+  **Fuori ambito.** Nessuna implementazione del pacchetto `Work/`: code, politica di ammissione, cache di anteprime e banda di ritenzione sono materiale del banco, non forma definitiva. Nessuna interfaccia utente di prodotto, nessuna pipeline di integrazione continua, nessun altro cancello.
+
+
+  ---
+
+  ## Soluzione tecnica
+
+  Il cancello è uno **spike misurativo**, non una funzione: il prodotto del lavoro è un numero misurato e un esito scritto. Il repository non contiene codice applicativo, quindi tutto nasce da zero sotto `Spikes/01-scale-memory/`, isolato dal futuro albero di prodotto e dichiaratamente usa-e-getta.
+
+  - **Pacchetto SwiftPM puro, senza dipendenze esterne.** L'ispezione dell'ambiente ha rilevato che **Xcode non è installato**: è attiva solo l'istanza Command Line Tools e `xcodebuild` fallisce. Il banco è quindi un pacchetto SwiftPM costruito con `swift build`, con zero dipendenze dichiarate (nessun `swift-argument-parser`, nessun GRDB): la costruzione resta ermetica e offline, e non introduce nel repository un progetto Xcode che il PRD prevede solo per il prodotto. Una sonda compilata ha confermato che l'SDK dei Command Line Tools (26.5) espone AppKit, QuickLookThumbnailing, ImageIO, CoreImage, Vision, CoreML e QuartzCore, e che `task_info(TASK_VM_INFO)` restituisce `phys_footprint`.
+  - **`QLThumbnailGenerator` funziona da un eseguibile non impacchettato.** Verificato dalla sonda: una JPEG 4000×3000 produce un'anteprima 512×384 in **89,4 ms** a freddo, contro **49,5 ms** della decodifica ridimensionata `CGImageSourceCreateThumbnailAtIndex`. Il banco misura entrambi i percorsi come tipi di lavoro distinti, perché la differenza è già rilevante per NFR-P1 e per la scelta di ADR-009.
+  - **Tre eseguibili e una libreria.** `gen-dataset` genera il dataset; `bench` esegue le misure per sottocomando; `BenchKit` è la libreria che contiene il campionatore di memoria, la statistica delle ripetizioni, l'impronta hardware e lo schema JSON dei risultati; `BenchKitTests` la verifica con Swift Testing. Il banco implementa code, politica di ammissione, cache di anteprime e banda di ritenzione **nella forma minima che serve a misurarle**, e questo materiale non deve essere riutilizzato: il fuori-ambito della spec lo vieta esplicitamente.
+  - **Host AppKit come strumentazione, non come interfaccia.** AC-3 richiede il tempo alla *prima schermata di anteprime* e la latenza dello *spostamento della selezione*: nessuna delle due esiste senza una finestra con griglia e selezione. Il banco apre quindi un `NSWindow` con `NSCollectionView` dentro un `NSScrollView`, dimensionato su una porta di vista dichiarata. È strumentazione di misura sotto `Spikes/`, non superficie di prodotto: non c'è mockup, non c'è design system, non c'è nulla da riusare. La misura headless è stata scartata perché ometterebbe il costo di composizione e presentazione del fotogramma, e sottostimare NFR-P1 significherebbe **confermare una soglia che il prodotto poi manca** — l'esito peggiore possibile per un cancello.
+  - **Oracolo del fotogramma.** «Prima schermata visibile» è definito come il completamento della transazione Core Animation nella quale viene assegnata l'ultima anteprima degli elementi che intersecano la porta di vista iniziale, catturato con `CATransaction.setCompletionBlock`. Il banco registra **anche** il timestamp di «anteprime pronte» prima della composizione, così il costo di presentazione resta visibile e la cifra resta onesta invece di essere una media di due grandezze diverse.
+  - **Dataset da 50.000 file con cloni APFS, e cartelle uniche dove l'I/O è l'oggetto della misura.** 50.000 file interi peserebbero oltre 350 GB. `clonefile(2)` (`cp -c`) produce file distinti per identità, nome e inode a costo di blocchi quasi nullo — verificato funzionante su questo volume APFS — ma i cloni **condividono i blocchi fisici** e sottostimano la lettura a freddo. Il piano separa quindi i due regimi: la cartella da 3.000 immagini di NFR-P1 è generata **unica e non clonata**, in **cinque cartelle disgiunte** perché ogni ripetizione parta davvero a cache fredda (senza `sudo purge`, che renderebbe la procedura non eseguibile da un altro sviluppatore); i cloni restano nella cartella da 50.000 file, dove l'oggetto della misura è l'occupazione di memoria e il costo di decodifica, entrambi interamente reali. La sottostima dell'I/O a freddo sulla cartella da 50.000 file è un limite dichiarato in `RESULT.md`, non un dettaglio taciuto.
+  - **Contenuto sintetico a byte-per-megapixel fotografici.** Con rumore puro una JPEG da 12 MP pesa 9,3 MB invece dei circa 4 MB di una fotografia reale, e la misura di I/O si gonfia. Il generatore sintetizza un composito a banda limitata (gradiente a bassa frequenza, texture a media frequenza, una regione di dettaglio ad alta frequenza) e regola la qualità di codifica per centrare un obiettivo dichiarato di byte per megapixel per formato entro ±20%, registrando nel manifest il valore effettivamente ottenuto. Il seme è versionato: il dataset è riproducibile.
+  - **Memoria misurata come `phys_footprint`.** Unica grandezza usata, campionata su un thread dedicato: 50 ms per le misure di scorrimento e sessione lunga, 5 ms per il costo per elemento. Per il costo per elemento il banco riporta **due** numeri distinti — il picco transitorio durante l'elemento (la grandezza che serve all'ammissione, perché l'ammissione precede l'esecuzione) e il delta trattenuto dopo il drenaggio del pool (la grandezza che rivela crescita di cache o perdite). ADR-009 ha bisogno di entrambi.
+  - **Ogni cifra tracciabile.** Ogni esecuzione emette JSON con un `measurementId`, l'impronta hardware completa e i campioni. Le esecuzioni selezionate per `RESULT.md` sono **versionate** sotto `Spikes/01-scale-memory/measurements/`, così ogni riga del documento è verificabile; solo il dataset generato e le esecuzioni di scarto restano fuori dal controllo di versione.
+
+  ### Decisioni architetturali
+
+  **Supera la soglia ADR: la politica di ammissione del lavoro con banda di ritenzione.** È l'oggetto stesso del cancello, riguarda una politica tecnica trasversale usata da più capacità previste (anteprime, metadati, duplicati, qualità), e la Wiki oggi non contiene **nessuna** pagina `type: decision` mentre `architecture/context-map` registra ADR-009 fra le incertezze aperte. Il piano crea quindi `decisions/work-admission-budget`.
+
+  - *Contesto.* L'ammissione precede l'esecuzione, quindi il costo va stimato e non misurato al momento dell'ammissione; le stime dichiarate nel PRD sono ipotesi non calibrate; una media misurata non protegge dall'elemento anomalo.
+  - *Opzione scelta.* Code specializzate per tipo sotto un budget di memoria comune, con stime **conservative pari al p95 misurato per cella** (tipo di lavoro × formato × classe di risoluzione), margine di sicurezza dichiarato per riga, **limite per singolo elemento** derivato dalla coda osservata degli anomali, e banda di ritenzione con soglie distinte di entrata e uscita la cui ampiezza è scelta come la più piccola che azzera il ricalcolo su un'oscillazione di scorrimento di ±0,25 schermate.
+  - *Alternative valutate.* (a) *Punto unico di ammissione* con una stima per pixel: scartata perché le dimensioni in pixel non stimano il costo di un modello di visione, di una texture o di un contenitore multipagina, e perché concentra in un componente la conoscenza di ogni tipo di lavoro. (b) *Rilascio immediato di ciò che esce dalla porta di vista*, senza banda: scartata già dal PRD 1.3 e qui misurata per confermare il motivo — un piccolo movimento di scorrimento butta via lavoro appena svolto, e il costo di quel ricalcolo è esattamente la misura che il piano usa per dimensionare la banda. (c) *Stima come media anziché p95*: scartata perché non protegge dall'anomalo; il banco genera deliberatamente elementi anomali (TIFF 16000×12000) per calibrare il limite per elemento su una coda reale e non sul solo corpo ben educato della distribuzione.
+  - *Conseguenze.* Le stime sono parametri prodotti da questo cancello e rivedibili con la misura a posteriori; l'ampiezza della banda è memoria occupata di proposito e va calibrata insieme al budget (NFR-P12), non scelta come costante di interfaccia; il test di lunga durata diventa parte del contratto e non un test facoltativo.
+  - *Intento di verifica.* Le misure di `bench item-cost`, `bench scroll-memory` e `bench retention-band`, versionate sotto `measurements/`, e le righe di esito di `RESULT.md`.
+
+  **Non superano la soglia ADR** e restano registrate qui: la scelta SwiftPM invece di progetto Xcode (imposta dall'ambiente, reversibile, materiale usa-e-getta), il cloning APFS del dataset (tecnica di misura con limite dichiarato), e l'host AppKit di strumentazione (nessun effetto su dato persistente, confine di integrazione o topologia).
+
+  ### Vincolo dichiarato sull'hardware di misura
+
+  La macchina disponibile è un **Apple M1 Pro con 32 GB** di memoria, APFS su SSD, macOS 26.6.1. Il PRD prescrive di misurare «dal Mac con meno memoria in target in su»: un tetto di memoria non si scopre su una macchina che non lo raggiunge mai. Questo **non** blocca il cancello — AC-2 chiede di dichiarare l'hardware e attribuirgli ogni cifra — ma vincola due cose, che i task rendono obbligatorie: `RESULT.md` dichiara lo scarto fra macchina di misura e Mac di riferimento più piccolo in target, e il margine di sicurezza delle stime di AC-4 deve coprire esplicitamente quello scarto invece di ignorarlo. Una conferma di NFR-P9 ottenuta su 32 GB e presentata come valida per ogni configurazione sarebbe formalmente conforme e sostanzialmente falsa.
+
+
+  ---
+
+  ## Baseline
+
+  Misurata sotto `/Users/gia/iMAGE_Surfer` prima di progettare i task. Nessun comando del progetto esiste ancora: il repository contiene solo documentazione e configurazione di processo.
+
+  | Controllo | Risultato prima dell'implementazione | Conseguenza sulla pianificazione |
+  |---|---|---|
+  | `swift build` (radice) | **Rosso, atteso:** `error: Could not find Package.swift in this directory or any of its parent directories.` | Nessun pacchetto esiste. TASK-01 crea il primo manifest; da lì in poi la verifica è `swift build --package-path Spikes/01-scale-memory` e l'attesa è verde. Nessun task promette verde per la radice. |
+  | `swift test --package-path Spikes/01-scale-memory` | **Non eseguibile:** il percorso non esiste | Diventa eseguibile dopo TASK-01. TASK-04 è il primo task autorizzato ad attendersi test verdi. |
+  | `xcodebuild -version` | **Rosso, prerequisito di ambiente:** `tool 'xcodebuild' requires Xcode, but active developer directory '/Library/Developer/CommandLineTools' is a command line tools instance` | **Vincolo, non difetto da correggere.** Nessun task usa `xcodebuild`, nessun progetto Xcode, nessun XCUITest. Il banco è SwiftPM. Se in futuro Xcode viene installato il piano resta valido. |
+  | `swift format lint --strict` | **Verde su repository vuoto** (nessun `.swift` presente); `swift format --version` → `6.3.0`, disponibile come sottocomando della toolchain | È il controllo di stile del piano. Ogni task che tocca Swift lo esegue sui file che ha modificato. |
+  | `swiftlint` | **Assente:** `swiftlint not found` | Il PRD lo prescrive per il prodotto, ma non è installato. **Nessun task promette un controllo SwiftLint**: lo stile è garantito da `swift format lint --strict`. |
+  | `swift --version` | **Verde:** Apple Swift 6.3.3, target `arm64-apple-macosx26.0` | Concorrenza stretta di Swift 6 disponibile; i target del banco la abilitano. |
+  | Sonda SDK compilata | **Verde:** AppKit, QuickLookThumbnailing, ImageIO, CoreImage, Vision, CoreML, QuartzCore presenti in `MacOSX.sdk` 26.5; `task_info(TASK_VM_INFO)` → `kr=0`; `QLThumbnailGenerator` funzionante da eseguibile non impacchettato (89,4 ms, JPEG 12 MP, a freddo); codifica ImageIO verde per JPEG/HEIC/PNG/TIFF; `cp -c` (clone APFS) → stato 0 | Tutti i meccanismi portanti del banco sono stati verificati **prima** di pianificarli. Nessun task deve riscoprire la disponibilità di un framework. |
+  | `git status --porcelain` | **Pulito** | Ogni task parte da albero pulito. La verifica di AC-1 su `git check-ignore` è affidabile. |
+  | `archetipo wiki validate` | **Verde:** `ok: true`, 5 pagine, nessun rilievo | I task Wiki devono lasciarla verde. |
+  | `archetipo wiki status` | **Verde:** 5 pagine, tutte `generated`, nessun `issues` | Nessuna pagina è `reviewed`, quindi `wiki reset` sarà un'operazione idempotente e senza effetto — resta comunque il primo passo obbligatorio di ogni task che modifica una pagina esistente, perché lo stato può cambiare prima dell'esecuzione. |
+  | `df -h /System/Volumes/Data` | **679 GB liberi** su 926 GB | Il dataset richiede circa 140 GB. Passa con ampio margine, ma TASK-02 include un pre-volo che verifica lo spazio e fallisce con un messaggio esplicito invece di riempire il disco. |
+
+  **Prerequisiti di ambiente, distinti dai difetti di codice.** macOS 15 o successivo su Apple Silicon (presente: macOS 26.6.1, M1 Pro); toolchain Swift 6 dai Command Line Tools (presente: 6.3.3); volume APFS con supporto ai cloni (presente); circa 200 GB liberi dichiarati per margine (presenti 679 GB). Nessun servizio da avviare, nessuna variabile d'ambiente, nessuna rete. Non serve installare Xcode, e il piano non lo richiede in nessun punto.
+
+  **Nessun file toccato dal piano parte con diagnostica preesistente:** tutti i file Swift del piano sono nuovi, quindi la soglia è zero diagnostiche di compilatore e zero rilievi di `swift format lint --strict` sui file creati.
+
+
+  ---
+
+  ## Mappa delle evidenze di accettazione
+
+  L'evidenza finale di questo cancello è in parte un documento, e questo crea un rischio preciso: un documento può *affermare* una cifra che nessuna esecuzione ha prodotto. L'oracolo scelto contro quel rischio è la **tracciabilità eseguibile**: ogni cifra di `RESULT.md` porta un `measurementId` che deve esistere in un JSON versionato sotto `measurements/`, e un controllo automatico lo verifica. Nessun criterio è dimostrato dalla sola esistenza di un file.
+
+  | Criterio | Stato di partenza / fixture | Livello di test | Oracolo osservabile | Task che produce l'evidenza |
+  |---|---|---|---|---|
+  | AC-1 | Repository pulito, nessun pacchetto | Integrazione + unità | `swift run gen-dataset --profile smoke` termina con stato 0; `dataset-manifest.json` riporta conteggi per cella identici a `dataset.json`; `git check-ignore -q Spikes/01-scale-memory/.data` esce 0 mentre `git ls-files Spikes/01-scale-memory/dataset.json` stampa il percorso; sul profilo pieno il manifest riporta `total: 50000` e 12 celle non vuote | TASK-02, verificato da TASK-04 |
+  | AC-2 | Manifest generato | Unità + tracciabilità | L'impronta hardware emessa contiene modello, `hw.memsize`, versione e build di macOS, tipo di filesystem e flag SSD, tutti non vuoti; `RESULT.md` § *Hardware di misura* riporta gli stessi valori del JSON versionato, e il controllo di tracciabilità di TASK-16 fallisce se una cifra del documento non ha `measurementId` corrispondente | TASK-03 e TASK-09, verificato da TASK-04 e TASK-16 |
+  | AC-3 | Cinque cartelle uniche da 3.000 file; cartella da 50.000 file | Integrazione (banco) | Quattro misure presenti nel JSON, ciascuna con `n >= 5`, `median`, `p95`, `stddev`, `iqr`: `firstScreenMs`, `selectionLatencyMs` (n=200 spostamenti sotto carico), `peakFootprintBytes` su scorrimento continuo di 50.000, `longSessionSlopeBytesPerHour` con intervallo di confidenza. `RESULT.md` riporta le stesse quattro cifre con ripetizioni e dispersione | TASK-05, TASK-06, TASK-09; verificato da TASK-08 e TASK-16 |
+  | AC-4 | Pool di elementi unici per cella + elementi anomali | Integrazione (banco) | Il JSON di `bench item-cost` contiene una riga per ogni cella non vuota di tipo di lavoro × formato × classe, con `n >= 20`, `median`, `p95`, `max`, `stddev` del delta di footprint transitorio **e** trattenuto; `RESULT.md` pubblica la tabella con, per riga, stima adottata, margine di sicurezza, limite per singolo elemento e `measurementId` della misura che la calibra | TASK-07 e TASK-09; verificato da TASK-08 e TASK-16 |
+  | AC-5 | Cartella da 50.000 file | Integrazione (banco) | Il JSON di `bench retention-band` contiene, per ogni coppia (entrata, uscita) dello spazzolamento, footprint di regime e numero di anteprime rigenerate da un'oscillazione di ±0,25 e ±1 schermate; `RESULT.md` dichiara la coppia scelta con le due soglie distinte e la motiva citando il conteggio di rigenerazione misurato | TASK-06 e TASK-09; verificato da TASK-08 e TASK-16 |
+  | AC-6 | `RESULT.md` con misure e stime già scritte | Ispezione documentale con controllo eseguibile | `RESULT.md` contiene quattro righe di esito, una per ADR-009, NFR-P1, NFR-P9, NFR-P10, ciascuna marcata **confermato** oppure **emendato**; ogni riga *emendato* porta il testo di sostituzione e il valore numerico misurato. Il controllo di TASK-16 fallisce se una delle quattro voci manca o non porta nessuno dei due marcatori | TASK-10, verificato da TASK-16 |
+  | AC-7 | Esito già redatto | Ispezione documentale con controllo eseguibile | Se una soglia non è raggiunta sull'hardware dichiarato, `RESULT.md` la elenca in § *Soglie non supportabili* con `measurementId` della misura che lo dimostra e la modifica proposta al requisito. Il controllo verifica la regola nei due versi: nessuna soglia mancata può essere assente dalla sezione, e nessuna esecuzione su hardware diverso da quello dichiarato in § *Hardware di misura* può comparire fra i `measurements/` citati | TASK-10, verificato da TASK-16 |
+
+  **Nessun oracolo è nascosto da un test double.** Il banco non usa mock: misura QuickLook, ImageIO, Vision e il filesystem reali. I soli valori sostituiti nei test unitari sono gli ingressi della statistica (serie note a media e dispersione calcolate a mano) e un'allocazione deliberata per verificare che il campionatore di footprint la rilevi — in nessun caso il componente responsabile di un criterio di accettazione viene sostituito.
+
+
+  ---
+
+  ## Strategia di test
+
+  Il banco è uno strumento di misura, e uno strumento di misura sbagliato produce numeri plausibili e falsi che poi chiudono un ADR. La strategia mette quindi sotto test **lo strumento**, non solo il suo prodotto, su tre livelli.
+
+  - **Unità (Swift Testing) sulla statistica e sul campionatore.** La statistica delle ripetizioni è verificata su serie con mediana, p95, deviazione standard e IQR calcolati a mano, inclusi i casi limite `n=1` e valori identici. Il campionatore di footprint è verificato allocando deliberatamente un blocco di dimensione nota e pretendendo che il picco osservato lo contenga: senza questo test un campionatore che restituisce sempre zero passerebbe inosservato e ogni misura di memoria del cancello sarebbe nulla.
+  - **Unità sul generatore.** Conteggi per cella coerenti con `dataset.json`, somma pari al totale dichiarato, byte per megapixel entro la tolleranza dichiarata per formato, unicità effettiva del pool non clonato (confronto di digest sui primi kilobyte), distinzione di inode fra cloni, e il pre-volo che rifiuta di generare quando lo spazio libero non basta.
+  - **Integrazione del banco sul profilo `--smoke`.** Un dataset minuscolo (poche decine di file) per cui tutti i sottocomandi di `bench` girano in pochi secondi. L'asserzione non è «il comando esce 0» ma: il JSON emesso valida contro lo schema, contiene esattamente le ripetizioni richieste, e ogni campo di dispersione è presente e finito. È il test che protegge dalla regressione più insidiosa dello spike — un banco che gira, stampa, e non misura niente.
+  - **Verifica di tracciabilità sul documento.** Un controllo eseguibile confronta `RESULT.md` con i JSON versionati sotto `measurements/`: ogni `measurementId` citato esiste, ogni cifra riportata corrisponde al valore nel JSON, le quattro voci di esito di AC-6 esistono e portano un marcatore, e ogni soglia mancata compare fra le non supportabili. È l'unico modo per cui un criterio dimostrato da un documento abbia un oracolo e non una lettura.
+  - **Ripetibilità dichiarata.** Ogni misura di AC-3 ha `n >= 5` e ogni cella di AC-4 `n >= 20`. Lo stato termico, l'alimentazione e la modalità a basso consumo sono registrati a ogni ripetizione: una serie eseguita sotto limitazione termica va riconosciuta come tale e non mediata con le altre.
+
+  **Test di lunga durata.** La sessione lunga di AC-3 gira 60 minuti nel profilo pieno e 5 minuti nel profilo di sviluppo. Non entra in nessuna pipeline: l'introduzione della pipeline di integrazione continua è esplicitamente fuori ambito per questa spec, e il test di lunga durata che il PRD prescrive in CI appartiene alla costruzione del prodotto, non al cancello.
+
+  ### Rinuncia ai test end-to-end di browser
+
+  **Motivo:** non applicabile per natura. iMAGE Surfer è un'applicazione nativa macOS e questo cancello non produce alcuna superficie di prodotto: non esiste rotta, non esiste browser, non esiste sessione utente. Nemmeno XCUITest è in gioco, per due ragioni indipendenti: il cancello non produce interfaccia utente di prodotto da coprire, e `xcodebuild` non è disponibile in questo ambiente (solo Command Line Tools).
+
+  **Livello di evidenza usato al suo posto:** il banco stesso. L'host AppKit non è la cosa sotto test, è lo strumento di misura: la sua correttezza è garantita dal fatto che ogni criterio di accettazione è dimostrato da un JSON con dispersione e ripetizioni, verificato dal test di integrazione sul profilo `--smoke`, e ricondotto al documento dal controllo di tracciabilità. Ogni AC affetto — AC-3, AC-4, AC-5 — ha il proprio oracolo in quella catena e nessuno dipende dall'ispezione visiva di una finestra.
+
+  **Filmabilità.** Il percorso di `Dimostra` è filmabile come sessione di terminale: esecuzione della procedura, esecuzione del banco con le misure grezze a schermo, apertura di `RESULT.md`, e `git check-ignore` sul dataset. La configurazione di progetto ha `e2e.record_demo_video: false` e la decisione finale di registrare o saltare appartiene ad `archetipo-review`, non a questa pianificazione.
+
+
+  ---
+
+  ## Impatto sulla Wiki
+
+  ```yaml
+  wiki_impact:
+    read: [references/prd]
+    update: [overview, engineering/code-map, operations/development, architecture/context-map]
+    create: [decisions/work-admission-budget]
+  ```
+
+  `archetipo wiki affected` sui percorsi attesi (`Spikes/01-scale-memory/Package.swift`, `RESULT.md`, `PROCEDURE.md`, `.gitignore`) ha restituito quattro candidati. La discriminante applicata a ciascuno non è «il file che ha prodotto la corrispondenza è importante» ma **«questa spec fa qualcosa che questa pagina afferma?»** — e qui il caso è netto, perché tutte e quattro le pagine core sono ancorate alla radice del progetto (`.`) proprio per l'affermazione *non esiste ancora codice*, che questa spec rende falsa. Una riga di motivazione per pagina:
+
+  - **`overview`** — la sezione *Stack* afferma «lo stack è prescritto dal PRD e non ancora presente nel repository. Nessun manifest di build, nessuna configurazione di progetto e nessun file sorgente sono stati rilevati», e la *Nota sull'ancoraggio delle evidenze* prescrive di restringere l'ancoraggio «appena esistono directory sorgente reali». Questa spec introduce il primo manifest SwiftPM e i primi file sorgente Swift del repository: entrambe le affermazioni decadono e la condizione della nota si verifica. → **update**.
+  - **`engineering/code-map`** — afferma «la tabella è vuota per constatazione», «l'ispezione ha rilevato un solo file nel repository (`docs/PRD.md`)» e «nessun codice non mappato». Sono affermazioni su *insiemi* di file, e diventano false per la comparsa di codice in qualunque punto dell'albero, incluso `Spikes/`. → **update**.
+  - **`operations/development`** — afferma «nel repository non esiste alcuna toolchain… zero manifest, zero configurazioni, zero automazioni e zero test. Non esiste un comando di build, non esiste un comando di test, e non esiste nulla da eseguire». Dopo questa spec esistono tutti e tre: `swift build`, `swift test` e un banco da eseguire. La stessa pagina ospita la tabella dei quattro cancelli e la frase «soglie dichiarate e non misure ottenute», che per il cancello n°1 cessa di valere. → **update**.
+  - **`architecture/context-map`** — l'area prevista *Ammissione del lavoro* è registrata con evidenza «nessuna» e la sezione *Incertezze* dichiara ADR-009 fra i cinque ADR provvisori «subordinati all'esito di quattro cancelli tecnici». Questa spec chiude ADR-009 e produce le stime calibrate che quell'area attendeva: entrambe le affermazioni cambiano. → **update**.
+  - **`references/prd`** — è la rappresentazione del PRD come concetto di riferimento, con `docs/PRD.md` come sorgente originale. La spec **non modifica il PRD**: `RESULT.md` porta il testo di sostituzione degli ADR emendati, non lo applica al documento di prodotto. La pagina ha informato la pianificazione (ADR-009, ADR-015, NFR-P1, NFR-P6, NFR-P9, NFR-P10, NFR-P12) ma nessuna sua affermazione decade. → **read**, non `update`.
+  - **`decisions/work-admission-budget`** — non esiste e va creata: la ricerca `archetipo wiki search --type decision` ha restituito zero pagine, quindi non c'è nessun ID stabile da riusare, e la decisione supera la soglia ADR per i motivi già argomentati nella soluzione tecnica. È la sede durevole della politica misurata, quella che gli implementatori delle Tappe successive consulteranno al posto di `Spikes/01-scale-memory/RESULT.md`. → **create**.
+
+  Ogni ID in `update` e `create` ha un task dedicato che ne nomina l'ID canonico. I quattro task di aggiornamento portano `archetipo wiki --project-root /Users/gia/iMAGE_Surfer reset <page-id>` come **primo passo** e pretendono `state: generated` in `archetipo wiki status` fra i criteri di completamento: non si modifica a mano il blocco `review` — si usa `archetipo wiki reset`.
+
+  _Piano generato da ARchetipo Planning — 2026-08-26_
+tasks:
+  - id: TASK-01
+    title: Pacchetto SwiftPM Spikes/01-scale-memory, esclusione dei dati generati e PROCEDURE.md
+    type: Impl
+    status: DONE
+    body: |-
+      ## Objective
+      Esiste un pacchetto SwiftPM costruibile sotto `Spikes/01-scale-memory/`, i dati generati sono esclusi dal controllo di versione, e `PROCEDURE.md` documenta la procedura eseguibile da un altro sviluppatore.
+
+      ## Read
+      - `.gitignore` — sezione `# --- iMAGE Surfer specific ---`, dove va aggiunta l'esclusione dei dati del banco.
+      - `docs/PRD.md` righe 500-515 — sezione *Development Environment*, per il vincolo «la procedura di generazione e configurazione è versionata sotto `Spikes/`, insieme all'esito scritto di ogni cancello».
+      - Nessun altro file: il pacchetto è nuovo.
+
+      ## Change
+      - Nuovo `Spikes/01-scale-memory/Package.swift`.
+      - Nuovi file segnaposto minimi per i tre target, sufficienti a far compilare il pacchetto.
+      - Nuovo `Spikes/01-scale-memory/PROCEDURE.md`.
+      - Nuovo `Spikes/01-scale-memory/README.md` di una pagina che rimanda a `PROCEDURE.md` e a `RESULT.md`.
+      - Modifica di `.gitignore`.
+      - **Non-obiettivi:** nessuna dipendenza esterna in `Package.swift`; nessun progetto Xcode; nessuna directory sotto `Packages/` o `App/`; nessuna logica di misura in questo task.
+
+      ## Steps
+      1. Crea `Spikes/01-scale-memory/Package.swift` con `// swift-tools-version:6.0`, `name: "ScaleMemorySpike"`, `platforms: [.macOS(.v15)]`, **nessuna** voce `dependencies`, e questi target:
+         - `.target(name: "BenchKit")` — libreria del kernel di misura.
+         - `.executableTarget(name: "gen-dataset", dependencies: ["BenchKit"])`.
+         - `.executableTarget(name: "bench", dependencies: ["BenchKit"])`.
+         - `.testTarget(name: "BenchKitTests", dependencies: ["BenchKit"])`.
+         Abilita la concorrenza stretta di Swift 6 su tutti i target con `swiftSettings: [.swiftLanguageMode(.v6)]`.
+      2. Crea la struttura `Sources/BenchKit/`, `Sources/gen-dataset/`, `Sources/bench/`, `Tests/BenchKitTests/` con un file minimo ciascuno: in `BenchKit` un `public enum SpikeInfo { public static let version = "1" }`, nei due eseguibili un `main.swift` che stampa l'uso e esce con stato 2, e nei test un caso che asserisce `SpikeInfo.version == "1"`.
+      3. Aggiungi a `.gitignore`, in fondo alla sezione `# --- iMAGE Surfer specific ---`, un blocco commentato `# Cancello 1 - dataset ed esecuzioni generate (la procedura e la configurazione sono versionate)` con le righe `Spikes/*/.data/` e `Spikes/*/runs/`. **Non** escludere `Spikes/01-scale-memory/measurements/`: le esecuzioni citate da `RESULT.md` vanno versionate.
+      4. Scrivi `PROCEDURE.md` in italiano con queste sezioni, tutte concrete e senza rimandi a conoscenza non scritta: *Prerequisiti* (macOS 15+ su Apple Silicon, toolchain Swift 6 dai Command Line Tools — **Xcode non è richiesto**, volume APFS con supporto ai cloni, circa 200 GB liberi); *Generazione del dataset* (il comando, il tempo atteso di 20-40 minuti, lo spazio atteso di circa 140 GB); *Esecuzione del banco* (i sottocomandi, in ordine); *Dove finiscono i risultati* (`runs/` non versionato, `measurements/` versionato, `RESULT.md`); *Profili* (`--profile full` e `--profile smoke`). Lascia i comandi esatti come segnaposto marcati `TODO(TASK-02)` e `TODO(TASK-05..07)`: verranno riempiti dai task che creano quei comandi.
+      5. Esegui `swift format --in-place --recursive Spikes/01-scale-memory/Sources Spikes/01-scale-memory/Tests` per allineare lo stile prima di verificare.
+
+      ## Verify
+      - Esegui dalla radice del repository: `swift build --package-path Spikes/01-scale-memory`
+      - Attesa: `Build complete!`, zero errori e zero avvisi. La baseline registra `swift build` alla radice come rosso per assenza di manifest: quel comando resta rosso ed è corretto, la verifica di questo task usa `--package-path`.
+      - Esegui: `swift test --package-path Spikes/01-scale-memory`
+      - Attesa: il singolo test passa. È il primo momento in cui `swift test` è eseguibile in questo repository.
+      - Esegui: `swift format lint --strict --recursive Spikes/01-scale-memory/Sources Spikes/01-scale-memory/Tests`
+      - Attesa: stato 0, nessun rilievo.
+      - Esegui: `git status --porcelain Spikes/01-scale-memory`
+      - Attesa: solo file sorgente, `Package.swift`, `PROCEDURE.md` e `README.md` come non tracciati. Nessuna directory `.build`.
+
+      ## Done
+      - [ ] AC-1 (parziale) — `Spikes/01-scale-memory/` esiste, il pacchetto compila con `swift build --package-path`, e `PROCEDURE.md` è versionato e documenta prerequisiti, spazio e tempo attesi.
+      - [ ] `.gitignore` esclude `Spikes/*/.data/` e `Spikes/*/runs/` e **non** esclude `Spikes/01-scale-memory/measurements/`.
+      - [ ] `Package.swift` non dichiara alcuna dipendenza esterna e non esiste alcun progetto Xcode.
+      - [ ] `swift format lint --strict` esce 0 sui file creati.
+
+      ## Blockers
+      None.
+    ref: TASK-01
+  - id: TASK-02
+    title: dataset.json versionato e generatore gen-dataset con manifest e pre-volo sullo spazio
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-01
+    body: |-
+      ## Objective
+      `swift run gen-dataset` produce l'insieme da 50.000 file segmentato per formato e classe di risoluzione, più le cartelle uniche per la misura di prima schermata, e scrive un manifest che rende ogni conteggio verificabile.
+
+      ## Read
+      - `Spikes/01-scale-memory/Package.swift` — i target creati in TASK-01.
+      - `Spikes/01-scale-memory/PROCEDURE.md` — i segnaposto `TODO(TASK-02)` da riempire.
+      - `docs/PRD.md` riga 508 — «I cancelli tecnici richiedono in aggiunta materiale non versionabile — un insieme di 50.000 file… la cui procedura di generazione e configurazione è versionata sotto `Spikes/`».
+
+      ## Change
+      - Nuovo `Spikes/01-scale-memory/dataset.json` — configurazione **versionata**.
+      - Nuovi file in `Spikes/01-scale-memory/Sources/BenchKit/`: `DatasetConfig.swift`, `ImageSynthesis.swift`, `DatasetManifest.swift`.
+      - `Spikes/01-scale-memory/Sources/gen-dataset/main.swift` — sostituisce il segnaposto.
+      - `Spikes/01-scale-memory/PROCEDURE.md` — riempie i `TODO(TASK-02)`.
+      - **Non-obiettivi:** nessuna misura di prestazione in questo task; nessuna scrittura fuori dalla directory di uscita; non versionare i file generati.
+
+      ## Steps
+      1. Scrivi `dataset.json` con `schema: "image-surfer/spike-01/dataset/v1"`, `seed: 20260826`, e:
+         - `resolutionClasses`: `S: [1600, 1200]` (2 MP), `M: [4032, 3024]` (12 MP), `L: [8000, 6000]` (48 MP).
+         - `bytesPerMegapixelTarget`: `jpeg: 0.35`, `heic: 0.18`, `png: 1.5`, `tiff: 3.0` (in MB/MP), con `tolerance: 0.20`.
+         - `scrollFolder`: `name: "scroll-50k"`, `total: 50000`, `uniquePerCell: 250`, `cloneRemainder: true`, e `distribution` per formato e classe: `jpeg {S: 6000, M: 21000, L: 3000}`, `heic {S: 2500, M: 9000, L: 1000}`, `png {S: 3000, M: 1800, L: 200}`, `tiff {S: 1500, M: 900, L: 100}`. La somma è esattamente 50.000.
+         - `firstScreenFolders`: `count: 5`, `size: 3000`, `unique: true`, `cloneRemainder: false`, `distribution` con la stessa asimmetria: `jpeg {S: 360, M: 1260, L: 180}`, `heic {S: 150, M: 540, L: 60}`, `png {S: 180, M: 108, L: 12}`, `tiff {S: 90, M: 54, L: 6}`. La somma è esattamente 3.000 per cartella.
+         - `itemCostPool`: `uniquePerCell: 25`.
+         - `anomalousItems`: `[{format: "tiff", pixels: [16000, 12000], count: 3}]`.
+         - `smokeProfile`: gli stessi campi ridotti — `scrollFolder.total: 240`, `uniquePerCell: 4`, `firstScreenFolders {count: 2, size: 24}`, `itemCostPool.uniquePerCell: 2`, `anomalousItems[0].count: 1`.
+      2. In `DatasetConfig.swift` definisci i tipi `Decodable` che rispecchiano lo schema, con validazione all'atto della decodifica: la somma di `distribution` deve combaciare con `total`/`size`, altrimenti errore esplicito che nomina la cella incoerente.
+      3. In `ImageSynthesis.swift` implementa la sintesi del contenuto. **Non usare rumore puro:** una JPEG da 12 MP di rumore pesa circa 9,3 MB contro i circa 4 MB di una fotografia reale, e gonfierebbe la misura di I/O. Componi invece, in un `CGContext` sRGB a 8 bit per componente, tre strati: un gradiente a bassa frequenza, una texture a media frequenza generata da un PRNG deterministico seminato con `seed` combinato all'indice del file, e una regione di dettaglio ad alta frequenza pari a circa un decimo dell'area. Codifica con `CGImageDestinationCreateWithURL` verso `public.jpeg`, `public.heic`, `public.png`, `public.tiff`. Per JPEG e HEIC calibra `kCGImageDestinationLossyCompressionQuality` con una ricerca binaria di al massimo 6 iterazioni su un campione per cella, per centrare `bytesPerMegapixelTarget` entro `tolerance`; riusa la qualità trovata per tutti i file della cella. Registra nel manifest il valore di qualità e i byte per megapixel effettivamente ottenuti.
+      4. In `main.swift` di `gen-dataset` implementa la riga di comando **senza librerie esterne**, parsando `CommandLine.arguments`: `--config <path>` (default `dataset.json` accanto all'eseguibile o passato per percorso), `--out <path>` (default `Spikes/01-scale-memory/.data`), `--profile full|smoke` (default `full`), `--force`. Su argomento sconosciuto stampa l'uso ed esci con stato 2.
+      5. Implementa il **pre-volo**, prima di scrivere qualunque file: stima lo spazio richiesto sommando, per ogni cella, `conteggioUnico × megapixel × bytesPerMegapixelTarget`; leggi lo spazio libero con `URL.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])`; se lo spazio libero è inferiore a `stima × 1,3` termina con stato 1 e un messaggio che riporta stima, disponibile e il suggerimento di ridurre `firstScreenFolders.count`. Verifica anche che il volume di uscita supporti i cloni, provando un `clonefile` su un file temporaneo e ricadendo su copia piena con avviso esplicito se fallisce.
+      6. Genera in questo ordine, parallelizzando la codifica su `ProcessInfo.processInfo.activeProcessorCount` con un `TaskGroup` a larghezza limitata:
+         a. `firstScreenFolders`: `count` cartelle `p1-run-01/ … p1-run-05/`, ciascuna con `size` file **tutti unici e mai clonati**, disgiunte fra loro. È il regime in cui l'I/O a freddo è l'oggetto della misura: nessun clone qui.
+         b. `scrollFolder`: per ogni cella genera `uniquePerCell` file unici, poi porta la cella al conteggio dichiarato con cloni APFS via `clonefile(2)`, ciascuno con nome distinto.
+         c. `itemCostPool/`: `uniquePerCell` file unici per cella, tutti non clonati.
+         d. `anomalous/`: gli elementi anomali dichiarati.
+      7. Scrivi `dataset-manifest.json` nella directory di uscita (quindi **non** versionato) con: `schema`, `configDigest` (SHA-256 di `dataset.json`), `seed`, `profile`, `generatedAt`, e per ogni cella `format`, `resolutionClass`, `pixels`, `uniqueCount`, `cloneCount`, `totalCount`, `bytesTotal`, `bytesPerMegapixelAchieved`, `encoderQuality`. Aggiungi in testa `totals` con `total`, `uniqueTotal`, `cloneTotal`, `bytesTotal`. Se una cella non centra la tolleranza, registra `toleranceMiss: true` sulla cella e stampa un avviso, senza fallire.
+      8. Riempi i `TODO(TASK-02)` di `PROCEDURE.md` con i comandi esatti, lo spazio atteso e il tempo atteso.
+      9. Esegui `swift format --in-place --recursive` sui percorsi modificati.
+
+      ## Verify
+      - Esegui: `swift build --package-path Spikes/01-scale-memory`
+      - Attesa: `Build complete!`, zero errori e zero avvisi.
+      - Esegui: `swift run --package-path Spikes/01-scale-memory gen-dataset --profile smoke --out /tmp/spike01-smoke --force`
+      - Attesa: stato 0 in meno di un minuto; `/tmp/spike01-smoke/dataset-manifest.json` esiste; `totals.total` è 240 e `firstScreenFolders` sono 2 cartelle da 24 file.
+      - Esegui: `swift format lint --strict --recursive Spikes/01-scale-memory/Sources`
+      - Attesa: stato 0.
+      - Esegui: `git check-ignore -q Spikes/01-scale-memory/.data && echo IGNORATO`
+      - Attesa: stampa `IGNORATO`. Se la directory non esiste ancora, creala vuota con `mkdir -p` prima del controllo.
+      - **Non** eseguire il profilo `full` in questo task: la generazione completa appartiene a TASK-09, che la esegue una volta sola.
+
+      ## Done
+      - [ ] AC-1 — `dataset.json` e il generatore sono versionati; il generatore produce l'insieme segmentato per formato e classe di risoluzione ed è eseguibile da un altro sviluppatore seguendo solo `PROCEDURE.md`.
+      - [ ] AC-1 — `dataset-manifest.json` riporta conteggi per cella, unici e cloni distinti, e la somma dichiarata; sul profilo `smoke` i conteggi combaciano con `smokeProfile`.
+      - [ ] AC-1 — `git check-ignore -q Spikes/01-scale-memory/.data` esce 0 mentre `git ls-files Spikes/01-scale-memory/dataset.json` stampa il percorso.
+      - [ ] Il pre-volo rifiuta la generazione con messaggio esplicito quando lo spazio libero è inferiore a 1,3 volte la stima.
+      - [ ] Le cartelle di prima schermata contengono file unici e mai clonati; i cloni esistono solo dentro `scroll-50k`.
+
+      ## Blockers
+      None.
+    ref: TASK-02
+  - id: TASK-03
+    title: Kernel di misura BenchKit - campionatore phys_footprint, statistica delle ripetizioni, impronta hardware, schema JSON
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-01
+    body: |-
+      ## Objective
+      `BenchKit` offre un campionatore di memoria, una statistica di dispersione, un'impronta hardware completa e uno schema JSON di risultato, così che ogni banco successivo produca cifre attribuibili e ripetute senza reimplementare nulla.
+
+      ## Read
+      - `Spikes/01-scale-memory/Package.swift` — il target `BenchKit`.
+      - `docs/PRD.md` righe 740-743 — NFR-P9, NFR-P10, NFR-P12, per le grandezze che il kernel deve saper esprimere.
+      - Nota già verificata in fase di pianificazione: `task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), …)` restituisce `kr = 0` e un `phys_footprint` valido su questo ambiente. Non serve riscoprirlo.
+
+      ## Change
+      - Nuovi file in `Spikes/01-scale-memory/Sources/BenchKit/`: `FootprintSampler.swift`, `Dispersion.swift`, `HostFingerprint.swift`, `MeasurementResult.swift`, `ResultWriter.swift`.
+      - **Non-obiettivi:** nessun banco, nessuna finestra, nessuna generazione di dataset in questo task; nessuna grandezza di memoria diversa da `phys_footprint`.
+
+      ## Steps
+      1. `FootprintSampler.swift`: attore o classe `Sendable` che campiona `phys_footprint` via `task_info(TASK_VM_INFO)` su un thread dedicato a intervallo configurabile (parametro `intervalMs`, usato a 50 ms per scorrimento e sessione lunga, a 5 ms per il costo per elemento). Espone `start()`, `stop() -> FootprintTrace`, e `current() -> UInt64`. `FootprintTrace` contiene i campioni con timestamp monotono (`DispatchTime.now().uptimeNanoseconds`), `peak`, `first`, `last`, e `baseline` impostato dal chiamante prima dell'avvio. Usa `phys_footprint` come **unica** grandezza di memoria: non mescolare `resident_size`, che misura una cosa diversa.
+      2. Aggiungi a `FootprintTrace` il calcolo `slopeBytesPerHour` con regressione lineare ai minimi quadrati sui campioni, più `slopeConfidenceInterval95` (errore standard della pendenza × 1,96). Serve a NFR-P9, che chiede l'assenza di crescita monotona: una pendenza il cui intervallo di confidenza contiene lo zero non è crescita, e va riportata come tale invece di essere arrotondata a «stabile».
+      3. `Dispersion.swift`: `struct Dispersion` con `n`, `min`, `median`, `p95`, `max`, `mean`, `stddev` (deviazione standard campionaria, denominatore `n-1`), `iqr`. Inizializzatore da `[Double]`. Definisci i percentili con interpolazione lineare fra ranghi e documenta la convenzione in commento: due implementazioni di p95 diverse producono cifre diverse nello stesso documento, e questo cancello pubblica p95 come stima adottata. Con `n == 1` restituisci `stddev = 0` e `iqr = 0` senza divisione per zero; con array vuoto restituisci `nil`.
+      4. `HostFingerprint.swift`: `struct HostFingerprint: Codable` raccolta a ogni esecuzione, tutti i campi non vuoti:
+         - `model` da `sysctlbyname("hw.model")`, `cpuBrand` da `machdep.cpu.brand_string`.
+         - `physicalMemoryBytes` da `hw.memsize`, `performanceCores` da `hw.perflevel0.logicalcpu`, `efficiencyCores` da `hw.perflevel1.logicalcpu`, `activeProcessorCount`.
+         - `osProductVersion` e `osBuildVersion` da `ProcessInfo.processInfo.operatingSystemVersionString` e `sysctlbyname("kern.osversion")`.
+         - `swiftVersion` compilata staticamente, `sdkVersion` letta da `/usr/bin/xcrun --show-sdk-version` con fallback a stringa vuota **solo** se il comando fallisce.
+         - `volumeFileSystemType` e `volumeIsSolidState` per il volume che contiene il dataset, `volumeAvailableBytes`.
+         - `thermalState` da `ProcessInfo.processInfo.thermalState`, `lowPowerModeEnabled`, `onACPower` da `IOPSCopyPowerSourcesInfo`.
+         Aggiungi `func assertComplete() throws` che fallisce nominando ogni campo vuoto o pari a zero: AC-2 chiede che l'hardware sia dichiarato, e un campo vuoto silenzioso è un'attribuzione mancante.
+      5. `MeasurementResult.swift`: `struct MeasurementResult: Codable` con `schema: "image-surfer/spike-01/measurement/v1"`, `measurementId` (UUID stringa, stampato anche a terminale), `bench` (nome del sottocomando), `startedAt`, `finishedAt`, `profile`, `datasetManifestDigest`, `host: HostFingerprint`, `parameters: [String: String]`, `repetitions: [Repetition]` e `dispersion: [String: Dispersion]`. `Repetition` contiene `index`, i valori misurati come `[String: Double]`, `thermalStateAtStart` e `thermalStateAtEnd`: una ripetizione eseguita sotto limitazione termica va riconoscibile e non mediata alla cieca con le altre.
+      6. `ResultWriter.swift`: scrive il risultato in `runs/<bench>-<timestamp>-<measurementId prefix>.json` con `JSONEncoder` a chiavi ordinate e output leggibile, e stampa a terminale un riepilogo compatto — `measurementId`, e per ogni grandezza `n`, mediana, p95 e deviazione standard. Il riepilogo a terminale è ciò che il revisore osserva nel percorso di `Dimostra`: deve contenere le cifre grezze, non un messaggio di successo.
+      7. Esegui `swift format --in-place --recursive` sui percorsi modificati.
+
+      ## Verify
+      - Esegui: `swift build --package-path Spikes/01-scale-memory`
+      - Attesa: `Build complete!`, zero errori e zero avvisi. Il target `BenchKit` compila in modalità Swift 6 con concorrenza stretta.
+      - Esegui: `swift format lint --strict --recursive Spikes/01-scale-memory/Sources`
+      - Attesa: stato 0.
+      - I test del kernel appartengono a TASK-04: qui non ci sono ancora asserzioni sul comportamento, e non promettere test verdi oltre a quello segnaposto di TASK-01.
+
+      ## Done
+      - [ ] AC-2 — `HostFingerprint` raccoglie modello, memoria fisica, tipo di filesystem e flag SSD del volume, versione e build di macOS, e `assertComplete()` fallisce nominando qualunque campo vuoto.
+      - [ ] AC-3 — `Dispersion` espone `n`, mediana, p95, deviazione standard e IQR, con convenzione di percentile documentata; `FootprintTrace` espone picco e pendenza con intervallo di confidenza al 95%.
+      - [ ] `phys_footprint` è l'unica grandezza di memoria usata dal kernel.
+      - [ ] `ResultWriter` stampa a terminale le cifre grezze con `measurementId`, non un messaggio di esito.
+      - [ ] `swift format lint --strict` esce 0 sui file creati.
+
+      ## Blockers
+      None.
+    ref: TASK-03
+  - id: TASK-04
+    title: Test unitari su generatore, statistica e campionatore di footprint
+    type: Test
+    status: DONE
+    dependencies:
+      - TASK-02
+      - TASK-03
+    body: |-
+      ## Objective
+      I test dimostrano che lo strumento di misura misura: la statistica calcola i valori attesi su serie note, il campionatore rileva un'allocazione deliberata, e il generatore produce le segmentazioni dichiarate con file effettivamente unici o effettivamente clonati.
+
+      ## Read
+      - `Spikes/01-scale-memory/Sources/BenchKit/Dispersion.swift`, `FootprintSampler.swift`, `HostFingerprint.swift` — le firme create in TASK-03.
+      - `Spikes/01-scale-memory/Sources/BenchKit/DatasetConfig.swift` e `ImageSynthesis.swift` — i tipi creati in TASK-02.
+      - `Spikes/01-scale-memory/dataset.json` — i conteggi dichiarati, incluso `smokeProfile`.
+
+      ## Change
+      - Nuovi file in `Spikes/01-scale-memory/Tests/BenchKitTests/`: `DispersionTests.swift`, `FootprintSamplerTests.swift`, `HostFingerprintTests.swift`, `DatasetConfigTests.swift`, `GeneratorTests.swift`.
+      - Rimuovi il test segnaposto di TASK-01 se ridondante.
+      - **Non-obiettivi:** nessun test che generi il dataset completo; nessun test che dipenda da tempi di esecuzione della macchina (il tempo è oggetto di misura, non di asserzione).
+
+      ## Steps
+      1. `DispersionTests.swift`: verifica su serie a valori noti. Con `[1, 2, 3, 4, 5]` attendi mediana 3, media 3, deviazione standard campionaria `sqrt(2.5)` entro 1e-9, IQR calcolato secondo la convenzione documentata. Aggiungi i casi limite: `n = 1` restituisce `stddev == 0` e `iqr == 0` senza errore; array vuoto restituisce `nil`; serie di valori identici restituisce `stddev == 0` e `p95` pari al valore. Aggiungi un caso su serie di 100 valori `1…100` che fissa per iscritto il p95 atteso secondo la convenzione scelta, così un cambio silenzioso di interpolazione fallisce il test invece di cambiare le cifre di `RESULT.md`.
+      2. `FootprintSamplerTests.swift`: **è il test che protegge dal difetto peggiore dello spike**, un campionatore che restituisce sempre zero e rende nulle tutte le misure di memoria del cancello. Rileva la baseline, avvia il campionatore a 5 ms, alloca e **tocca** un blocco di almeno 256 MB (scrivi almeno un byte per pagina, altrimenti la memoria non entra nel footprint), attendi qualche campione, rilascia, ferma il campionatore. Asserisci: `trace.peak - trace.baseline >= 200 MB` e `trace.samples.count >= 5`. Aggiungi un test della pendenza su una traccia sintetica costruita a mano con crescita nota, verificando che `slopeBytesPerHour` la ritrovi entro il 10% e che su una traccia piatta l'intervallo di confidenza al 95% contenga lo zero.
+      3. `HostFingerprintTests.swift`: raccogli l'impronta e asserisci che `assertComplete()` non lancia, che `physicalMemoryBytes > 0`, `activeProcessorCount > 0`, `model` e `osBuildVersion` non vuoti, e `volumeFileSystemType` non vuoto. Aggiungi un test che costruisce un'impronta con `model` vuoto e pretende che `assertComplete()` lanci nominando `model`.
+      4. `DatasetConfigTests.swift`: decodifica `dataset.json` reale dal repository e asserisci che `scrollFolder.distribution` sommi esattamente a 50.000, che ogni `firstScreenFolders.distribution` sommi esattamente a 3.000, che `smokeProfile.scrollFolder.total` sia 240, e che le celle siano 12. Aggiungi un caso su una configurazione malformata in linea, con una distribuzione che non somma al totale, e pretendi un errore di decodifica il cui messaggio nomina la cella incoerente.
+      5. `GeneratorTests.swift`: genera in una directory temporanea con il profilo `smoke` e asserisci sull'esito osservabile, non sullo stato di uscita:
+         - `dataset-manifest.json` esiste e `totals.total == 240`;
+         - i conteggi per cella del manifest combaciano con `smokeProfile`;
+         - le cartelle di prima schermata sono 2, ciascuna con 24 file, e i file sono **effettivamente unici**: confronta i digest SHA-256 dei primi 64 KB e pretendi zero collisioni;
+         - dentro `scroll-50k` esistono cloni: prendi due file della stessa cella prodotti come cloni e pretendi `st_ino` **diversi** ma contenuto identico, così il test distingue un clone da una copia sbagliata e da un file mancante;
+         - per ogni cella con formato `jpeg` o `heic` il manifest riporta `bytesPerMegapixelAchieved` entro `tolerance` del target, oppure `toleranceMiss: true`: il test accetta entrambe le cose ma non un campo assente.
+         - il pre-volo: invoca la stima dello spazio con un valore di disponibilità iniettato più basso della soglia e pretendi l'errore, verificando che il messaggio riporti stima e disponibile.
+      6. Esegui `swift format --in-place --recursive Spikes/01-scale-memory/Tests`.
+
+      ## Verify
+      - Esegui: `swift test --package-path Spikes/01-scale-memory`
+      - Attesa: tutti i test passano. La baseline registra `swift test` come non eseguibile prima di TASK-01 e verde con un solo test dopo: questo è il primo momento in cui la suite ha contenuto reale, e l'attesa è verde.
+      - Esegui: `swift build --package-path Spikes/01-scale-memory`
+      - Attesa: `Build complete!`, zero errori e zero avvisi.
+      - Esegui: `swift format lint --strict --recursive Spikes/01-scale-memory/Tests`
+      - Attesa: stato 0.
+
+      ## Done
+      - [ ] AC-1 — i test dimostrano che il generatore produce le segmentazioni dichiarate, con unicità verificata per digest e clonazione verificata per inode distinto a contenuto identico.
+      - [ ] AC-2 — un'impronta hardware incompleta fa fallire `assertComplete()`, e il test lo dimostra nominando il campo.
+      - [ ] AC-3 — la statistica di dispersione è verificata su serie a valori noti, inclusa la convenzione di p95 fissata per iscritto.
+      - [ ] Il campionatore di footprint rileva un'allocazione toccata di almeno 256 MB: un campionatore muto fallisce il test invece di produrre misure nulle.
+      - [ ] `swift test --package-path Spikes/01-scale-memory` verde e `swift format lint --strict` a stato 0.
+
+      ## Blockers
+      None.
+    ref: TASK-04
+  - id: TASK-05
+    title: Host AppKit del banco con bench first-screen su 3.000 immagini e bench selection-latency sotto carico
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-03
+    body: |-
+      ## Objective
+      Il banco misura il tempo alla prima schermata di anteprime su 3.000 immagini e la latenza dello spostamento della selezione mentre il lavoro in sottofondo è attivo, entrambe con ripetizioni e dispersione.
+
+      ## Read
+      - `Spikes/01-scale-memory/Sources/BenchKit/MeasurementResult.swift`, `Dispersion.swift`, `HostFingerprint.swift`, `ResultWriter.swift` — il kernel di TASK-03.
+      - `Spikes/01-scale-memory/dataset.json` — `firstScreenFolders`, `viewport` implicito nei parametri di questo task.
+      - `docs/PRD.md` righe 732 e 734 — NFR-P1 (prima schermata entro 1 secondo su 3.000 immagini) e NFR-P3 (spostamento della selezione entro 100 ms anche sotto lavoro in sottofondo).
+
+      ## Change
+      - Nuovi file in `Spikes/01-scale-memory/Sources/BenchKit/`: `BenchHost.swift`, `ThumbnailPipeline.swift`, `FirstScreenBench.swift`, `SelectionLatencyBench.swift`.
+      - `Spikes/01-scale-memory/Sources/bench/main.swift` — dispatch dei sottocomandi, sostituisce il segnaposto.
+      - `Spikes/01-scale-memory/PROCEDURE.md` — riempie i `TODO(TASK-05..07)` per questi due sottocomandi.
+      - **Non-obiettivi:** questo host è **strumentazione di misura**, non interfaccia di prodotto. Non creare nulla sotto `Packages/` o `App/`, nessun design system, nessuna astrazione riutilizzabile, nessun tema. Il fuori-ambito della spec vieta di costruire code, ammissione, cache e banda nella forma definitiva: qui vivono nella forma minima che serve a misurarle, e restano dentro `Spikes/`.
+
+      ## Steps
+      1. `BenchHost.swift`: costruisci l'host AppKit da un eseguibile non impacchettato. `NSApplication.shared`, `setActivationPolicy(.regular)`, `activate()`, un `NSWindow` di dimensione dichiarata dai parametri (default 1512×982, la porta di vista di riferimento), un `NSScrollView` con dentro un `NSCollectionView` a `NSCollectionViewFlowLayout`, dimensione elemento 240×240 e spaziatura 8. Con questi valori la porta di vista iniziale contiene 6 colonne × 5 righe = 30 elementi: calcola il numero effettivo dalla geometria invece di fissarlo a costante, e registralo nei `parameters` del risultato. L'elemento mostra un `NSImageView` con segnaposto grigio finché l'anteprima non arriva.
+      2. `ThumbnailPipeline.swift`: la forma minima della politica di ammissione, sufficiente a misurare. Code separate per tipo di lavoro (`io`, `quicklook`, `decode`, `vision`) con larghezza configurabile — default pari a `performanceCores` — e priorità inferiore all'interazione. Due percorsi di produzione dell'anteprima, selezionabili da parametro `--thumbnail-path quicklook|imageio`: `QLThumbnailGenerator.generateBestRepresentation` con `representationTypes: .thumbnail`, e `CGImageSourceCreateThumbnailAtIndex` con `kCGImageSourceThumbnailMaxPixelSize` pari al lato dell'elemento per il fattore di scala dello schermo. Entrambi i percorsi vanno misurati: in fase di pianificazione una sonda ha dato 89,4 ms per QuickLook contro 49,5 ms per ImageIO sulla stessa JPEG da 12 MP, e la differenza è rilevante per NFR-P1.
+      3. `FirstScreenBench.swift`: per ogni ripetizione usa **una cartella di prima schermata diversa e mai toccata** (`p1-run-01`, `p1-run-02`, …). È il modo con cui la ripetizione parte a cache fredda senza `sudo purge`, che renderebbe la procedura non eseguibile da un altro sviluppatore. Sequenza della singola ripetizione:
+         a. `t0` = istante in cui parte l'enumerazione della cartella (`FileManager.enumerator` con `.skipsHiddenFiles` e prefetch delle chiavi di risorsa necessarie). L'enumerazione non deve bloccare: registra separatamente `firstUrlsReadyMs`, il tempo perché i primi `visibleCount` URL siano disponibili.
+         b. Assegna le anteprime man mano che arrivano. Quando viene assegnata l'anteprima **dell'ultimo** elemento che interseca la porta di vista iniziale, registra `thumbnailsReadyMs` e, **nella stessa transazione**, installa `CATransaction.setCompletionBlock` che registra `firstScreenMs`. La definizione di «prima schermata visibile» è il completamento di quella transazione, ed è dichiarata così nel risultato.
+         c. Registra entrambe le cifre. Non pubblicare una sola grandezza: la differenza fra `thumbnailsReadyMs` e `firstScreenMs` è il costo di composizione, e tacerla renderebbe la misura di NFR-P1 ottimistica.
+         d. Fra ripetizioni ricostruisci l'host da zero e attendi che il footprint torni entro il 10% della baseline, con scadenza di 30 secondi; se non rientra, marca la ripetizione con `footprintDidNotSettle: true` invece di proseguire in silenzio.
+      4. `SelectionLatencyBench.swift`: misura sotto carico reale, su `scroll-50k`.
+         a. Satura le code: avvia la produzione di anteprime su tutta la cartella da 50.000 file e, in parallelo, un carico di visione artificiale (`VNGenerateImageFeaturePrintRequest` sugli elementi di classe M) così che tutte le code siano occupate. Verifica la saturazione prima di misurare: attendi che ogni coda abbia lavoro in attesa, e registra le profondità di coda nei `parameters`.
+         b. Emetti `n = 200` spostamenti di selezione a cadenza fissa (default 150 ms) costruendo un `NSEvent.keyEvent` per la freccia destra e inviandolo con `NSApp.postEvent(_:atStart: false)`. Misurare dall'evento inviato, e non chiamando direttamente l'API di selezione, è deliberato: il vincolo di NFR-P3 riguarda la reattività sotto contesa del ciclo di eventi, che una chiamata diretta scavalcherebbe.
+         c. Per ogni spostamento misura l'intervallo fra `postEvent` e il completamento della transazione del fotogramma in cui `collectionView.selectionIndexPaths` riflette il nuovo elemento, con lo stesso oracolo di transazione del punto 3b.
+         d. Riporta la dispersione sui 200 spostamenti e, separatamente, il conteggio degli spostamenti oltre 100 ms: una mediana buona con una coda oltre soglia è un'informazione diversa da una mediana buona con coda pulita, e ADR-009 ha bisogno di distinguerle.
+      5. `main.swift` di `bench`: parsa `CommandLine.arguments` senza librerie esterne. Sottocomandi `first-screen` e `selection-latency`, opzioni comuni `--data <path>` (default `Spikes/01-scale-memory/.data`), `--profile full|smoke`, `--repetitions <n>` (default 5 per `first-screen`), `--out <path>` (default `Spikes/01-scale-memory/runs`), `--thumbnail-path quicklook|imageio`, `--window <w>x<h>`. Su sottocomando o opzione sconosciuti stampa l'uso ed esci con stato 2. Prima di misurare invoca `HostFingerprint.assertComplete()` e verifica che il manifest del dataset esista, altrimenti termina con stato 1 e un messaggio che rimanda a `gen-dataset`.
+      6. Riempi i `TODO(TASK-05..07)` di `PROCEDURE.md` relativi a questi due sottocomandi con i comandi esatti.
+      7. Esegui `swift format --in-place --recursive` sui percorsi modificati.
+
+      ## Verify
+      - Esegui: `swift run --package-path Spikes/01-scale-memory gen-dataset --profile smoke --out /tmp/spike01-smoke --force`
+      - Attesa: stato 0 (già dimostrato in TASK-02; serve come dato di ingresso).
+      - Esegui: `swift run --package-path Spikes/01-scale-memory bench first-screen --profile smoke --data /tmp/spike01-smoke --repetitions 2 --out /tmp/spike01-runs`
+      - Attesa: stato 0; a terminale compaiono `measurementId` e le cifre grezze; il JSON in `/tmp/spike01-runs` contiene 2 ripetizioni con `firstScreenMs`, `thumbnailsReadyMs` e `firstUrlsReadyMs` tutti finiti e maggiori di zero, e un blocco `dispersion` con `n == 2`.
+      - Esegui: `swift run --package-path Spikes/01-scale-memory bench selection-latency --profile smoke --data /tmp/spike01-smoke --out /tmp/spike01-runs`
+      - Attesa: stato 0; il JSON contiene le ripetizioni degli spostamenti con dispersione e il conteggio degli spostamenti oltre 100 ms.
+      - Esegui: `swift build --package-path Spikes/01-scale-memory && swift test --package-path Spikes/01-scale-memory`
+      - Attesa: build senza errori né avvisi, test di TASK-04 ancora verdi.
+      - Esegui: `swift format lint --strict --recursive Spikes/01-scale-memory/Sources`
+      - Attesa: stato 0.
+      - **Non** eseguire il profilo `full` qui: appartiene a TASK-09.
+
+      ## Done
+      - [ ] AC-3 — `bench first-screen` produce il tempo alla prima schermata su cartelle da 3.000 immagini nel profilo pieno, con ripetizioni su cartelle disgiunte e dispersione, e pubblica separatamente `thumbnailsReadyMs` e `firstScreenMs`.
+      - [ ] AC-3 — `bench selection-latency` produce la latenza dello spostamento della selezione con le code dimostrabilmente sature, su 200 spostamenti, con dispersione e conteggio oltre 100 ms.
+      - [ ] L'oracolo del fotogramma è il completamento della transazione Core Animation, dichiarato nei `parameters` del risultato.
+      - [ ] Entrambi i percorsi di anteprima, QuickLook e ImageIO, sono selezionabili da parametro e registrati nel risultato.
+      - [ ] Nulla è stato creato fuori da `Spikes/01-scale-memory/`.
+      - [ ] `swift build` e `swift test` verdi, `swift format lint --strict` a stato 0.
+
+      ## Blockers
+      None.
+    ref: TASK-05
+  - id: TASK-06
+    title: bench scroll-memory su 50.000 file con sessione di lunga durata e bench retention-band con isteresi
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-05
+    body: |-
+      ## Objective
+      Il banco misura l'occupazione di picco su 50.000 immagini con scorrimento continuo, l'andamento in sessione di lunga durata, e il costo di ricalcolo di un piccolo movimento di scorrimento per ogni coppia di soglie della banda di ritenzione.
+
+      ## Read
+      - `Spikes/01-scale-memory/Sources/BenchKit/BenchHost.swift` e `ThumbnailPipeline.swift` — l'host e le code create in TASK-05.
+      - `Spikes/01-scale-memory/Sources/BenchKit/FootprintSampler.swift` — picco e pendenza con intervallo di confidenza.
+      - `docs/PRD.md` righe 737, 740, 743 — NFR-P6 (banda con soglie distinte di entrata e uscita, un piccolo movimento non perde il lavoro appena svolto), NFR-P9 (tetto di picco e assenza di crescita monotona), NFR-P12 (l'ampiezza della banda è un parametro del budget, non una costante di interfaccia).
+
+      ## Change
+      - Nuovi file in `Spikes/01-scale-memory/Sources/BenchKit/`: `RetentionBand.swift`, `ScrollMemoryBench.swift`, `RetentionBandBench.swift`.
+      - `Spikes/01-scale-memory/Sources/bench/main.swift` — aggiunge i due sottocomandi.
+      - `Spikes/01-scale-memory/PROCEDURE.md` — riempie i `TODO` relativi.
+      - **Non-obiettivi:** la banda implementata qui è materiale del banco e non la forma definitiva; non estrarla in un pacchetto riutilizzabile. Non introdurre alcuna pipeline di integrazione continua: il test di lunga durata di questo cancello si esegue a mano, e la CI è fuori ambito per questa spec.
+
+      ## Steps
+      1. `RetentionBand.swift`: la forma minima della banda con isteresi. Un elemento **entra** nell'insieme trattenuto quando la sua distanza dalla porta di vista è inferiore a `enterBand` schermate, e viene **rilasciato** solo quando supera `exitBand` schermate, con `exitBand > enterBand`. Il rilascio avvolge ogni elemento in un blocco esplicito che azzera il riferimento all'immagine. Espone due contatori osservabili, indispensabili alla misura di AC-5: `regeneratedCount`, quante anteprime sono state ricalcolate perché rilasciate e poi richieste di nuovo, e `retainedCount`.
+      2. `ScrollMemoryBench.swift`, misura di picco su `scroll-50k`:
+         a. Avvia il campionatore a 50 ms e registra la baseline prima di aprire la cartella.
+         b. Scorri programmaticamente a velocità dichiarata (default 3 schermate al secondo, parametro `--scroll-speed`) dall'inizio alla fine della cartella e poi indietro fino all'inizio, così che ogni elemento entri ed esca dalla banda almeno una volta.
+         c. Riporta `peakFootprintBytes`, `plateauFootprintBytes` (mediana dei campioni dell'ultimo terzo della corsa) e `marginalBytesPer1000Items` calcolato sul tratto centrale, dove il regime è stabile.
+         d. Ripeti `--repetitions` volte (default 5) ricostruendo l'host fra le corse, e riporta la dispersione.
+      3. `ScrollMemoryBench.swift`, sessione di lunga durata: modalità `--long-session <minuti>` (default 60 nel profilo pieno, 5 nel profilo di sviluppo, 1 nel profilo `smoke`). Alterna raffiche di scorrimento e periodi di quiete a proporzione dichiarata, campiona a 50 ms per tutta la durata, e riporta `longSessionSlopeBytesPerHour` con l'intervallo di confidenza al 95% calcolato dal kernel, il picco, e il footprint finale contro quello iniziale. **La conclusione va formulata sull'intervallo di confidenza, non sul segno della pendenza:** NFR-P9 chiede l'assenza di crescita monotona, e una pendenza il cui intervallo contiene lo zero non è crescita. Riporta esplicitamente `slopeDistinguishableFromZero: Bool`.
+      4. `RetentionBandBench.swift`, spazzolamento delle soglie. Per ogni combinazione di `enterBand ∈ {0,5, 1, 2, 3, 4}` schermate e `delta ∈ {0,5, 1, 2}` con `exitBand = enterBand + delta`:
+         a. Porta la vista al centro della cartella da 50.000 file e attendi il regime; registra `steadyFootprintBytes` e `retainedCount`.
+         b. **Oscillazione piccola:** azzera `regeneratedCount`, scorri di +0,25 schermate e torna a −0,25 per 10 cicli, e registra `regeneratedSmall` e il tempo di parete e il costo in memoria della rigenerazione. È la misura che AC-5 pretende come motivazione dell'ampiezza scelta.
+         c. **Oscillazione media:** ripeti con ±1 schermata e registra `regeneratedMedium`.
+         d. Emetti una riga per combinazione, con `enterBand`, `exitBand`, `steadyFootprintBytes`, `retainedCount`, `regeneratedSmall`, `regeneratedMedium`, `regenerationWallClockMs`.
+         e. Calcola e riporta nel risultato la **coppia raccomandata**: la più piccola `(enterBand, exitBand)` per cui `regeneratedSmall == 0`, indicando il costo in memoria di regime che quella coppia comporta. Se nessuna combinazione azzera `regeneratedSmall`, riporta `recommendation: nil` con il motivo: è un esito legittimo che TASK-10 tratterà come soglia non supportabile, non un errore da aggirare allargando lo spazzolamento.
+      5. Aggiungi a `main.swift` i sottocomandi `scroll-memory` (con `--long-session <minuti>`, `--scroll-speed`, `--repetitions`) e `retention-band`, con le stesse opzioni comuni e la stessa verifica del manifest già presente in TASK-05.
+      6. Riempi i `TODO` di `PROCEDURE.md` per questi sottocomandi, indicando che la sessione di lunga durata occupa 60 minuti nel profilo pieno.
+      7. Esegui `swift format --in-place --recursive` sui percorsi modificati.
+
+      ## Verify
+      - Esegui: `swift run --package-path Spikes/01-scale-memory bench scroll-memory --profile smoke --data /tmp/spike01-smoke --repetitions 2 --long-session 1 --out /tmp/spike01-runs`
+      - Attesa: stato 0; il JSON contiene `peakFootprintBytes`, `plateauFootprintBytes`, `marginalBytesPer1000Items` con dispersione a `n == 2`, e il blocco di sessione lunga con `longSessionSlopeBytesPerHour`, l'intervallo di confidenza e `slopeDistinguishableFromZero`. Tutti i valori finiti; il picco superiore alla baseline.
+      - Esegui: `swift run --package-path Spikes/01-scale-memory bench retention-band --profile smoke --data /tmp/spike01-smoke --out /tmp/spike01-runs`
+      - Attesa: stato 0; il JSON contiene 15 righe (5 valori di `enterBand` × 3 di `delta`), ciascuna con `regeneratedSmall` e `regeneratedMedium` presenti, e un campo `recommendation` presente — valorizzato o esplicitamente nullo con motivo.
+      - Esegui: `swift build --package-path Spikes/01-scale-memory && swift test --package-path Spikes/01-scale-memory`
+      - Attesa: build senza errori né avvisi; test di TASK-04 ancora verdi.
+      - Esegui: `swift format lint --strict --recursive Spikes/01-scale-memory/Sources`
+      - Attesa: stato 0.
+      - **Non** eseguire il profilo `full`: appartiene a TASK-09.
+
+      ## Done
+      - [ ] AC-3 — `bench scroll-memory` produce l'occupazione di picco su 50.000 immagini con scorrimento continuo, con ripetizioni e dispersione.
+      - [ ] AC-3 — la sessione di lunga durata produce l'andamento dell'occupazione con pendenza, intervallo di confidenza al 95% e `slopeDistinguishableFromZero`, invece di un giudizio «stabile» non quantificato.
+      - [ ] AC-5 — `bench retention-band` produce, per ogni coppia di soglie distinte di entrata e uscita, il footprint di regime e il numero di anteprime rigenerate da un'oscillazione di ±0,25 e ±1 schermate, con il costo di parete della rigenerazione.
+      - [ ] AC-5 — il risultato include la coppia raccomandata secondo la regola dichiarata, oppure `recommendation: nil` con il motivo se nessuna combinazione azzera il ricalcolo sull'oscillazione piccola.
+      - [ ] Nulla è stato creato fuori da `Spikes/01-scale-memory/` e nessuna pipeline di CI è stata introdotta.
+      - [ ] `swift build` e `swift test` verdi, `swift format lint --strict` a stato 0.
+
+      ## Blockers
+      None.
+    ref: TASK-06
+  - id: TASK-07
+    title: bench item-cost - costo in memoria per tipo di lavoro, formato e classe di risoluzione, e limite per singolo elemento
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-03
+    body: |-
+      ## Objective
+      Il banco misura il costo in memoria di un singolo elemento per ogni combinazione di tipo di lavoro, formato e classe di risoluzione, e dalla coda osservata deriva il limite per singolo elemento.
+
+      ## Read
+      - `Spikes/01-scale-memory/Sources/BenchKit/FootprintSampler.swift` e `Dispersion.swift` — campionatore a 5 ms e statistica.
+      - `Spikes/01-scale-memory/Sources/BenchKit/ThumbnailPipeline.swift` — i tipi di lavoro già definiti in TASK-05, da riusare come tassonomia.
+      - `docs/PRD.md` riga 532 (ADR-009) e riga 741 (NFR-P10) — «le stime sono conservative, segmentate per tipo di lavoro, formato, classe di risoluzione e hardware, calibrate su misure reali, dotate di margine di sicurezza… e affiancate da un limite per singolo elemento che interrompe l'elemento anomalo anziché il processo».
+
+      ## Change
+      - Nuovi file in `Spikes/01-scale-memory/Sources/BenchKit/`: `ItemCostBench.swift`, `WorkKind.swift`.
+      - `Spikes/01-scale-memory/Sources/bench/main.swift` — aggiunge il sottocomando `item-cost` e la modalità di esecuzione per cella in sottoprocesso.
+      - `Spikes/01-scale-memory/PROCEDURE.md` — riempie i `TODO` relativi.
+      - **Non-obiettivi:** nessuna politica di ammissione definitiva; nessuna scelta della stima adottata in questo task — qui si misura, la stima e il margine si dichiarano in TASK-09 e TASK-10.
+
+      ## Steps
+      1. `WorkKind.swift`: enumerazione dei tipi di lavoro corrispondenti alle code di ADR-009, ciascuno con l'operazione misurata dichiarata in commento:
+         - `io` — apertura del file e lettura delle chiavi di risorsa (`.fileSize`, `.contentModificationDate`, `.fileResourceIdentifierKey`), senza decodifica.
+         - `decode` — `CGImageSourceCreateThumbnailAtIndex` a dimensione dichiarata pari al lato dell'elemento per il fattore di scala.
+         - `quicklook` — `QLThumbnailGenerator.generateBestRepresentation` con `representationTypes: .thumbnail`.
+         - `vision` — `VNGenerateImageFeaturePrintRequest` più `VNDetectFaceLandmarksRequest` sulla stessa immagine.
+         - `store` — scrittura dell'anteprima prodotta su un file di cache e rilettura.
+      2. `ItemCostBench.swift`: misura una **cella** per invocazione, dove una cella è la terna (tipo di lavoro, formato, classe di risoluzione). Per ogni cella, su `n` elementi distinti del pool `itemCostPool` (default `n = 20`, minimo accettato 20 nel profilo pieno):
+         a. Avvia il campionatore a 5 ms; attendi che il footprint sia in quiete e registra `baseline` come mediana di 20 campioni consecutivi entro l'1% l'uno dall'altro, con scadenza.
+         b. Esegui l'operazione su un solo elemento dentro un `autoreleasepool` esplicito; al termine drena il pool e attendi che il footprint torni entro `baseline + 1 MB`, con scadenza di 5 secondi.
+         c. Registra **due** grandezze distinte per l'elemento: `transientPeakDeltaBytes`, il picco durante l'operazione meno la baseline — è la grandezza che serve all'ammissione, perché l'ammissione precede l'esecuzione; e `retainedDeltaBytes`, il footprint dopo il drenaggio meno la baseline — è la grandezza che rivela crescita di cache o mancato rilascio. ADR-009 ha bisogno di entrambe e pubblicarne una sola falserebbe la tabella di AC-4.
+         d. Se il footprint non rientra entro la scadenza, registra `didNotSettle: true` sull'elemento e prosegui: un elemento che non rilascia è un dato, non un errore da nascondere.
+         e. Registra anche `wallClockMs` per elemento.
+      3. Esecuzione di tutte le celle: `bench item-cost --all` **rilancia se stesso come sottoprocesso una cella per volta** (`bench item-cost --cell <work>:<format>:<class>`) e unisce i JSON parziali. La separazione di processo è deliberata: il footprint è una grandezza dell'intero processo, e misurare celle diverse nello stesso processo contaminerebbe la baseline con la cache accumulata dalle celle precedenti. Salta e registra come vuote le celle senza dati nel pool.
+      4. Elementi anomali: esegui una passata dedicata su `anomalous/` (i TIFF 16000×12000 generati in TASK-02) per ogni tipo di lavoro, e registrala come cella `anomalous` separata. Serve a calibrare il limite per elemento su una coda reale: un limite derivato solo dal corpo ben educato della distribuzione non protegge da ciò che deve fermare.
+      5. Derivazione del limite per singolo elemento, calcolata dal banco e registrata nel risultato: per ogni cella `perItemLimitBytes = max(p95 × 4, maxObserved × 1,5)`, arrotondato per eccesso al MB. Registra nel risultato la formula come stringa, insieme ai valori che l'hanno prodotta: la tabella di AC-4 deve poter citare la misura che la calibra, e una formula implicita nel codice non è citabile.
+      6. Aggiungi a `main.swift` il sottocomando `item-cost` con `--all`, `--cell <work>:<format>:<class>`, `--n <ripetizioni>`, e le opzioni comuni. Prima di misurare invoca `HostFingerprint.assertComplete()`.
+      7. Riempi i `TODO` di `PROCEDURE.md` per questo sottocomando, indicando che `--all` lancia una cella per sottoprocesso e il tempo atteso.
+      8. Esegui `swift format --in-place --recursive` sui percorsi modificati.
+
+      ## Verify
+      - Esegui: `swift run --package-path Spikes/01-scale-memory bench item-cost --cell decode:jpeg:M --n 20 --data /tmp/spike01-smoke --out /tmp/spike01-runs`
+      - Attesa: stato 0; il JSON contiene 20 elementi con `transientPeakDeltaBytes` e `retainedDeltaBytes` presenti e finiti, dispersione con `n == 20`, `median`, `p95`, `max`, `stddev`, e `perItemLimitBytes` con la formula registrata come stringa.
+      - Attesa aggiuntiva sul merito: `transientPeakDeltaBytes` mediano è maggiore di zero. Un valore pari a zero significa che il campionatore non sta osservando l'operazione, e va trattato come difetto di questo task, non come misura.
+      - Esegui: `swift run --package-path Spikes/01-scale-memory bench item-cost --all --profile smoke --data /tmp/spike01-smoke --out /tmp/spike01-runs`
+      - Attesa: stato 0; il JSON unito contiene una riga per ogni cella non vuota, ciascuna con il proprio `measurementId` di sottoprocesso, più la cella `anomalous`.
+      - Esegui: `swift build --package-path Spikes/01-scale-memory && swift test --package-path Spikes/01-scale-memory`
+      - Attesa: build senza errori né avvisi; test di TASK-04 ancora verdi.
+      - Esegui: `swift format lint --strict --recursive Spikes/01-scale-memory/Sources`
+      - Attesa: stato 0.
+
+      ## Done
+      - [ ] AC-4 — `bench item-cost` produce una riga per ogni cella non vuota di tipo di lavoro × formato × classe di risoluzione, con `n >= 20` nel profilo pieno e dispersione completa.
+      - [ ] AC-4 — ogni cella riporta separatamente il picco transitorio e il delta trattenuto, non un solo numero di memoria.
+      - [ ] AC-4 — il limite per singolo elemento è derivato con formula dichiarata e registrata nel risultato insieme ai valori che l'hanno prodotta, ed è calibrato anche sulla cella degli elementi anomali.
+      - [ ] Ogni cella è misurata in un sottoprocesso dedicato, così che la baseline non sia contaminata dalle celle precedenti.
+      - [ ] `swift build` e `swift test` verdi, `swift format lint --strict` a stato 0.
+
+      ## Blockers
+      None.
+    ref: TASK-07
+  - id: TASK-08
+    title: Test di integrazione del banco sul profilo smoke con validazione dello schema dei risultati
+    type: Test
+    status: DONE
+    dependencies:
+      - TASK-05
+      - TASK-06
+      - TASK-07
+    body: |-
+      ## Objective
+      Un test dimostra che ogni sottocomando del banco produce misure vere e non solo uno stato di uscita zero: JSON conforme allo schema, ripetizioni effettivamente eseguite, e ogni campo di dispersione presente e finito.
+
+      ## Read
+      - `Spikes/01-scale-memory/Sources/BenchKit/MeasurementResult.swift` — lo schema da validare.
+      - `Spikes/01-scale-memory/Sources/bench/main.swift` — i cinque sottocomandi e le loro opzioni.
+      - `Spikes/01-scale-memory/dataset.json` — `smokeProfile`.
+
+      ## Change
+      - Nuovo `Spikes/01-scale-memory/Tests/BenchKitTests/BenchIntegrationTests.swift`.
+      - **Non-obiettivi:** nessuna asserzione su valori assoluti di tempo o memoria — il tempo e la memoria sono l'oggetto della misura, non del test, e un'asserzione su una soglia qui renderebbe il test dipendente dalla macchina. Nessuna esecuzione del profilo pieno.
+
+      ## Steps
+      1. Predisponi il dataset `smoke` una volta per l'intera suite, in una directory temporanea, invocando il generatore in-process (non come processo esterno) per tenere il test rapido e deterministico.
+      2. Per ognuno dei cinque sottocomandi — `first-screen`, `selection-latency`, `scroll-memory`, `retention-band`, `item-cost` — esegui il banco sul profilo `smoke` e asserisci **sull'esito osservabile**:
+         a. Il JSON emesso decodifica in `MeasurementResult` senza errori e `schema` è esattamente `"image-surfer/spike-01/measurement/v1"`.
+         b. `measurementId` non è vuoto e `host.assertComplete()` non lancia.
+         c. `repetitions.count` è **esattamente** il numero richiesto sulla riga di comando. È l'asserzione centrale del test: un banco che gira, stampa e non misura passerebbe un controllo sullo stato di uscita e fallisce qui.
+         d. Per ogni grandezza dichiarata dal sottocomando, il blocco `dispersion` esiste e ogni campo — `n`, `min`, `median`, `p95`, `max`, `mean`, `stddev`, `iqr` — è presente e **finito**: nessun `NaN`, nessun infinito. Un `NaN` che arrivasse fino a `RESULT.md` diventerebbe una cifra falsa in un documento di esito.
+         e. `dispersion["…"]!.n == repetitions.count` per ogni grandezza: la dispersione deve essere calcolata su tutte le ripetizioni, non su un sottoinsieme.
+      3. Asserzioni specifiche per sottocomando, sul merito e non sulla forma:
+         - `first-screen`: `thumbnailsReadyMs <= firstScreenMs` in ogni ripetizione, perché la composizione non può precedere la disponibilità delle anteprime; e le ripetizioni hanno usato cartelle **diverse**, verificato leggendo il parametro registrato.
+         - `selection-latency`: il numero di spostamenti misurati corrisponde a quello richiesto, ed è registrata la profondità di coda che dimostra la saturazione prima della misura; una misura di latenza «sotto carico» eseguita a code vuote sarebbe la misura sbagliata, e questo controllo lo impedisce.
+         - `scroll-memory`: `peakFootprintBytes > host` baseline registrata, `slopeDistinguishableFromZero` presente come booleano, e l'intervallo di confidenza presente.
+         - `retention-band`: 15 righe, `exitBand > enterBand` su ognuna, `regeneratedSmall` e `regeneratedMedium` presenti; e il campo `recommendation` presente, valorizzato o esplicitamente nullo con motivo.
+         - `item-cost`: una riga per cella non vuota, `perItemLimitBytes > p95` su ogni riga, e la stringa della formula presente.
+      4. Aggiungi un test negativo che invoca il banco **senza** manifest del dataset e pretende stato di uscita 1 con un messaggio che nomina `gen-dataset`: la procedura deve essere eseguibile da un altro sviluppatore, e un banco che fallisce in modo opaco su dataset assente non lo è.
+      5. Aggiungi un test negativo su opzione sconosciuta, che pretende stato 2 e la stampa dell'uso.
+      6. Esegui `swift format --in-place --recursive Spikes/01-scale-memory/Tests`.
+
+      ## Verify
+      - Esegui: `swift test --package-path Spikes/01-scale-memory`
+      - Attesa: tutti i test passano, inclusi quelli di TASK-04. La suite completa resta entro qualche minuto perché usa solo il profilo `smoke`.
+      - Esegui: `swift build --package-path Spikes/01-scale-memory`
+      - Attesa: `Build complete!`, zero errori e zero avvisi.
+      - Esegui: `swift format lint --strict --recursive Spikes/01-scale-memory/Tests`
+      - Attesa: stato 0.
+
+      ## Done
+      - [ ] AC-3 — i sottocomandi `first-screen`, `selection-latency` e `scroll-memory` producono ripetizioni nel numero richiesto con dispersione completa e finita, verificato dal test e non dallo stato di uscita.
+      - [ ] AC-4 — `item-cost` produce una riga per cella con limite per elemento maggiore del p95 e formula registrata.
+      - [ ] AC-5 — `retention-band` produce 15 righe con soglie distinte e i due conteggi di rigenerazione.
+      - [ ] La latenza della selezione è misurata a code dimostrabilmente sature, verificato dal parametro di profondità registrato.
+      - [ ] Nessun campo di dispersione può essere `NaN` o infinito senza far fallire il test.
+      - [ ] Il banco invocato senza dataset esce 1 nominando `gen-dataset`; con opzione sconosciuta esce 2 stampando l'uso.
+      - [ ] `swift test` verde e `swift format lint --strict` a stato 0.
+
+      ## Blockers
+      None.
+    ref: TASK-08
+  - id: TASK-09
+    title: Esecuzione completa del banco e RESULT.md con hardware, misure grezze, stime di costo e banda di ritenzione
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-02
+      - TASK-08
+    body: |-
+      ## Objective
+      Il banco è eseguito una volta sul profilo pieno sull'hardware dichiarato, le esecuzioni citate sono versionate, e `RESULT.md` pubblica hardware, misure grezze, tabella delle stime di costo e ampiezza della banda di ritenzione.
+
+      ## Read
+      - `Spikes/01-scale-memory/PROCEDURE.md` — la sequenza di comandi da eseguire, così come è stata scritta per un altro sviluppatore.
+      - I JSON prodotti in `Spikes/01-scale-memory/runs/` dopo l'esecuzione — sono la sola fonte delle cifre.
+      - `docs/PRD.md` righe 732, 734, 740-743 — i testi di NFR-P1, NFR-P3, NFR-P9, NFR-P10, NFR-P12 da confrontare con le misure.
+
+      ## Change
+      - Nuovo `Spikes/01-scale-memory/RESULT.md` — sezioni *Hardware di misura*, *Misure grezze*, *Stime di costo in memoria*, *Banda di ritenzione*, *Limiti della misura*.
+      - Nuova directory `Spikes/01-scale-memory/measurements/` con i JSON **selezionati**, versionati.
+      - Genera `Spikes/01-scale-memory/.data/` (non versionato).
+      - **Non-obiettivi:** in questo task **non** si scrive l'esito su ADR-009 e sugli NFR — appartiene a TASK-10. Non modificare `docs/PRD.md`: il testo di sostituzione vive in `RESULT.md`, non viene applicato al documento di prodotto.
+
+      ## Steps
+      1. Genera il dataset completo seguendo `PROCEDURE.md` alla lettera, senza scorciatoie: `swift run --package-path Spikes/01-scale-memory gen-dataset --profile full`. Attendi circa 20-40 minuti e circa 140 GB. Se il pre-volo rifiuta, riduci `firstScreenFolders.count` documentando la riduzione nei *Limiti della misura* — non aggirare il pre-volo.
+      2. Prima di misurare, porta la macchina in condizioni dichiarabili e registrale: alimentazione di rete collegata, modalità a basso consumo disattivata, nessun'altra applicazione utente attiva. Lo stato termico viene comunque registrato a ogni ripetizione dal kernel.
+      3. Esegui i cinque sottocomandi sul profilo pieno nell'ordine di `PROCEDURE.md`, con `--repetitions 5` dove previsto e `--long-session 60`. Esegui `first-screen` **due volte, una per percorso di anteprima** (`--thumbnail-path quicklook` e `--thumbnail-path imageio`): la sonda di pianificazione ha dato 89,4 ms contro 49,5 ms per elemento, e su 3.000 immagini la differenza può decidere il verdetto su NFR-P1. Entrambe le esecuzioni vanno pubblicate.
+      4. Copia in `measurements/` i JSON delle esecuzioni che `RESULT.md` cita, con nome che contiene il sottocomando e il prefisso di `measurementId`. Lascia in `runs/` tutto il resto. Verifica che `measurements/` **sia** tracciabile da Git: `.gitignore` esclude `runs/` e `.data/`, non `measurements/`.
+      5. Scrivi `RESULT.md` § **Hardware di misura**: modello, CPU, conteggio di core prestazionali ed efficienti, memoria fisica, tipo di filesystem e flag SSD del volume del dataset, spazio libero, versione e build di macOS, versione di Swift e dell'SDK, stato di alimentazione e modalità a basso consumo. Copia i valori dal blocco `host` del JSON, non da conoscenza a memoria. Aggiungi la frase che AC-2 richiede: **ogni cifra di questo documento è attribuita a questa configurazione e a nessun'altra.**
+      6. Scrivi § **Misure grezze** con una tabella per ciascuna delle quattro misure di AC-3 — tempo alla prima schermata su 3.000 immagini (entrambi i percorsi di anteprima, e separatamente `thumbnailsReadyMs` e `firstScreenMs`), latenza dello spostamento della selezione sotto lavoro in sottofondo, occupazione di picco su 50.000 con scorrimento continuo, andamento in sessione di lunga durata. Ogni riga porta: `n`, mediana, p95, minimo, massimo, deviazione standard, IQR, e il `measurementId`. Per la sessione lunga riporta pendenza, intervallo di confidenza al 95% e se è distinguibile da zero — non scrivere «stabile» al posto del numero.
+      7. Scrivi § **Stime di costo in memoria** (AC-4): una tabella con una riga per cella non vuota di tipo di lavoro × formato × classe di risoluzione, e per ogni riga: mediana e p95 del picco transitorio, delta trattenuto, **stima adottata** pari al p95 arrotondato per eccesso, **margine di sicurezza** espresso come rapporto fra stima adottata e mediana, **limite per singolo elemento** con la formula dichiarata, e `measurementId` della misura che la calibra. Aggiungi la riga degli elementi anomali. Nel testo che precede la tabella, dichiara esplicitamente il vincolo sull'hardware: la macchina di misura ha 32 GB e non è il Mac con meno memoria in target, quindi il margine di sicurezza deve coprire quello scarto, e va detto quanto.
+      8. Scrivi § **Banda di ritenzione** (AC-5): la tabella dello spazzolamento con le coppie (entrata, uscita), footprint di regime e conteggi di rigenerazione, poi la **coppia dichiarata** con le sue due soglie distinte, motivata citando il costo di ricalcolo misurato dell'oscillazione di ±0,25 schermate e il footprint che quella scelta comporta. Se il banco ha restituito `recommendation: nil`, scrivi qui il fatto e lascia la conseguenza a TASK-10: non allargare lo spazzolamento per ottenere una raccomandazione.
+      9. Scrivi § **Limiti della misura**, per intero e senza attenuazioni: (a) la cartella da 50.000 file usa cloni APFS, quindi la lettura a freddo è **sottostimata** su quella cartella, mentre le cartelle da 3.000 file sono uniche e non clonate e la misura di NFR-P1 non ne è affetta; (b) la macchina di misura ha 32 GB e il PRD prescrive di misurare dal Mac con meno memoria in target in su; (c) il contenuto è sintetico, calibrato per byte per megapixel fotografici, con i valori effettivi nel manifest; (d) Xcode non è installato, quindi nessuna misura passa da `xcodebuild` e nessun test di interfaccia XCUITest esiste; (e) eventuali ripetizioni eseguite sotto limitazione termica, elencate se presenti.
+      10. Verifica a mano, prima di chiudere, che ogni cifra scritta nel documento sia rintracciabile in un file di `measurements/`. Il controllo automatico arriva in TASK-16, ma non consegnare un documento che sai già non lo passerebbe.
+
+      ## Verify
+      - Esegui: `ls Spikes/01-scale-memory/measurements/*.json | wc -l`
+      - Attesa: almeno 6 file (i cinque sottocomandi più la seconda esecuzione di `first-screen`).
+      - Esegui: `git check-ignore -q Spikes/01-scale-memory/.data && git check-ignore -q Spikes/01-scale-memory/runs && echo "dati ignorati"`
+      - Attesa: stampa `dati ignorati`.
+      - Esegui: `git ls-files --others --exclude-standard Spikes/01-scale-memory/measurements | wc -l`
+      - Attesa: un valore maggiore di zero — i JSON selezionati sono visibili a Git, quindi versionabili, e non esclusi.
+      - Esegui: `swift test --package-path Spikes/01-scale-memory`
+      - Attesa: verde, come in TASK-08. L'esecuzione del profilo pieno non deve aver richiesto modifiche al codice; se le ha richieste, i test le coprono.
+      - Ispezione manuale di `RESULT.md`: le quattro sezioni esistono, ogni tabella ha la colonna `measurementId` popolata, e la sezione *Limiti della misura* contiene tutti e cinque i punti dell'elenco.
+
+      ## Done
+      - [ ] AC-2 — § *Hardware di misura* dichiara modello, memoria e tipo di disco, con i valori copiati dal blocco `host` del JSON, e la frase di attribuzione esplicita.
+      - [ ] AC-3 — § *Misure grezze* riporta tutte e quattro le misure con `n`, mediana, p95, deviazione standard, IQR e `measurementId`; la sessione lunga riporta pendenza e intervallo di confidenza, non un giudizio qualitativo.
+      - [ ] AC-4 — § *Stime di costo in memoria* pubblica la tabella segmentata con stima adottata, margine di sicurezza, limite per singolo elemento e `measurementId` per riga, più la riga degli anomali, e dichiara come il margine copre lo scarto di hardware.
+      - [ ] AC-5 — § *Banda di ritenzione* dichiara le due soglie distinte e le motiva con il costo di ricalcolo misurato dell'oscillazione piccola.
+      - [ ] I JSON citati sono versionati sotto `measurements/`; dataset ed esecuzioni di scarto restano esclusi.
+      - [ ] `docs/PRD.md` non è stato modificato.
+
+      ## Blockers
+      None.
+    ref: TASK-09
+  - id: TASK-10
+    title: RESULT.md - esito su ADR-009, NFR-P1, NFR-P9, NFR-P10 e registrazione delle soglie non supportabili
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-09
+    body: |-
+      ## Objective
+      `RESULT.md` chiude il cancello: ognuna delle quattro voci risulta **confermata** oppure **emendata** con testo di sostituzione e valori misurati, e ogni soglia non raggiungibile è registrata come **non supportabile** con la misura che lo dimostra.
+
+      ## Read
+      - `Spikes/01-scale-memory/RESULT.md` — le sezioni scritte in TASK-09; le cifre vengono da lì e da `measurements/`.
+      - `docs/PRD.md` riga 532 (ADR-009), riga 732 (NFR-P1), riga 740 (NFR-P9), riga 741 (NFR-P10) — i testi **esatti** da confermare o sostituire. Copiali, non riassumerli a memoria: un testo di sostituzione che parte da una parafrasi non è un emendamento.
+      - `docs/PRD.md` riga 286 — «un cancello può concludere che qualcosa non è supportabile: è un esito legittimo, non un fallimento».
+
+      ## Change
+      - `Spikes/01-scale-memory/RESULT.md` — aggiunge § *Esito*, § *Soglie non supportabili* e § *Conseguenze per la costruzione*.
+      - **Non-obiettivi:** non modificare `docs/PRD.md`. Non modificare nessuna pagina Wiki: appartiene ai task da TASK-11 a TASK-15. E soprattutto: **non ripetere alcuna misura su una configurazione hardware diversa** da quella dichiarata in § *Hardware di misura*, per nessun motivo, incluso il caso in cui una soglia risulti mancata. AC-7 lo vieta esplicitamente: una soglia non raggiungibile sull'hardware dichiarato è un esito valido che chiude il cancello, non un risultato da riprovare altrove fino a ottenere una conferma.
+
+      ## Steps
+      1. Scrivi § **Esito** con esattamente quattro voci, una per ADR-009, NFR-P1, NFR-P9, NFR-P10. Ogni voce ha questa forma fissa, così che sia leggibile a colpo d'occhio e verificabile da un controllo automatico:
+         - il nome della voce;
+         - il marcatore **confermato** oppure **emendato** in grassetto, uno dei due e mai entrambi né nessuno;
+         - la soglia o l'affermazione dichiarata nel PRD, citata testualmente;
+         - la cifra misurata che decide, con il suo `measurementId`;
+         - se **emendato**, il **testo di sostituzione** completo, scritto come andrebbe nel PRD, con i valori numerici misurati al posto delle soglie dichiarate.
+      2. Regola di decisione, da applicare e non da interpretare a posteriori:
+         - **NFR-P1** è confermato se il p95 di `firstScreenMs` sulle cinque ripetizioni sta entro 1 secondo, per almeno uno dei due percorsi di anteprima; in quel caso dichiara **quale** percorso lo regge, perché la scelta fra QuickLook e ImageIO diventa un vincolo per la costruzione. Se nessuno dei due lo regge, è emendato con il valore misurato.
+         - **NFR-P9** ha due parti indipendenti e vanno decise separatamente: il tetto di picco, che diventa la cifra misurata di `peakFootprintBytes` più il margine dichiarato; e l'assenza di crescita monotona, decisa su `slopeDistinguishableFromZero` e sull'intervallo di confidenza, non sul segno della pendenza. Se una delle due parti non regge, la voce è emendata e il testo di sostituzione dice quale.
+         - **NFR-P10** è confermato se le stime per cella hanno una dispersione tale che il p95 con il margine dichiarato copre il massimo osservato, ed esiste un limite per elemento che intercetta la cella degli anomali. Se il p95 con margine non copre il massimo osservato in qualche cella, la voce è emendata e il testo di sostituzione dichiara il margine effettivamente necessario.
+         - **ADR-009** è confermato se le tre precedenti reggono **e** la banda di ritenzione ha una coppia di soglie che azzera il ricalcolo sull'oscillazione piccola. Altrimenti è emendato, e il testo di sostituzione riscrive le parti di ADR-009 che le misure contraddicono, in particolare l'ampiezza della banda e la struttura delle stime.
+      3. Scrivi § **Soglie non supportabili** (AC-7). Per ogni soglia dichiarata nel PRD che l'hardware dichiarato non raggiunge: il requisito, la cifra misurata con `measurementId`, la constatazione **non supportabile su questa configurazione**, e la **modifica proposta al requisito** — un valore alternativo, una condizione, o una riduzione di ambito. Se nessuna soglia è mancata, scrivi la sezione con la frase esplicita che nessuna soglia è risultata non supportabile: la sezione presente e vuota è informazione, la sezione assente è ambiguità. Aggiungi la frase che chiude la regola di AC-7: **l'esito è valido e chiude il cancello; nessuna misura è stata ripetuta su una configurazione diversa da quella dichiarata.**
+      4. Scrivi § **Conseguenze per la costruzione**: le decisioni che le Tappe successive erediteranno, in forma di elenco breve e azionabile — percorso di anteprima da adottare, stime per cella e loro margine, limite per elemento, coppia di soglie della banda, e il tetto di memoria dichiarato con l'hardware a cui è attribuito. È la sezione da cui TASK-11 trae il contenuto della pagina di decisione della Wiki.
+      5. Se la costruzione dello scope va rivista, registralo qui: il PRD alla riga 192 dichiara che l'*Area 12 — Editing di base* e il punteggio estetico sono i due candidati al rinvio «da rivedere alla fine del cancello n°1». Se le stime misurate non reggono lo scope, scrivilo come osservazione con la misura che la sostiene. Non aprire spec né modificare il backlog: qui si registra, non si decide il piano di prodotto.
+      6. Rileggi il documento intero verificando che ogni cifra abbia un `measurementId` e che nessuna cifra sia stata scritta a memoria o arrotondata senza dirlo.
+
+      ## Verify
+      - Esegui: `grep -c -E '\*\*(confermato|emendato)\*\*' Spikes/01-scale-memory/RESULT.md`
+      - Attesa: almeno 4 — una occorrenza per voce di esito.
+      - Esegui: `for v in "ADR-009" "NFR-P1" "NFR-P9" "NFR-P10"; do grep -q "$v" Spikes/01-scale-memory/RESULT.md && echo "$v presente" || echo "$v MANCANTE"; done`
+      - Attesa: quattro righe `presente`, nessuna `MANCANTE`.
+      - Esegui: `grep -q "Soglie non supportabili" Spikes/01-scale-memory/RESULT.md && echo sezione-presente`
+      - Attesa: stampa `sezione-presente`, sia che soglie mancate esistano sia che non esistano.
+      - Esegui: `git diff --stat docs/PRD.md`
+      - Attesa: nessun output — il PRD non è stato modificato.
+      - Esegui: `git status --porcelain docs/wiki`
+      - Attesa: nessun output — nessuna pagina Wiki è stata toccata in questo task.
+      - Esegui: `swift test --package-path Spikes/01-scale-memory`
+      - Attesa: verde, invariato rispetto a TASK-08. Questo task tocca solo Markdown e non deve poter rompere la suite.
+
+      ## Done
+      - [ ] AC-6 — § *Esito* contiene esattamente quattro voci, una per ADR-009, NFR-P1, NFR-P9 e NFR-P10, ciascuna con uno e un solo marcatore **confermato** o **emendato**.
+      - [ ] AC-6 — ogni voce **emendato** porta il testo di sostituzione completo con i valori numerici misurati al posto delle soglie dichiarate, e ogni voce cita il `measurementId` della misura che decide.
+      - [ ] AC-7 — § *Soglie non supportabili* esiste in ogni caso; ogni soglia mancata è registrata con la misura che lo dimostra e la modifica proposta al requisito.
+      - [ ] AC-7 — il documento dichiara che nessuna misura è stata ripetuta su configurazione diversa da quella dichiarata, e nessun file di `measurements/` riporta un `host` diverso da quello di § *Hardware di misura*.
+      - [ ] § *Conseguenze per la costruzione* elenca le decisioni ereditate dalle Tappe successive.
+      - [ ] `docs/PRD.md` e `docs/wiki/` non sono stati modificati.
+
+      ## Blockers
+      None.
+    ref: TASK-10
+  - id: TASK-11
+    title: Wiki - crea la pagina di decisione decisions/work-admission-budget
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-10
+    body: |-
+      ## Objective
+      La Wiki contiene `decisions/work-admission-budget`, prima pagina `type: decision` del progetto, che registra come conoscenza durevole la politica di ammissione del lavoro con banda di ritenzione chiusa da questo cancello.
+
+      ## Read
+      - `.claude/skills/archetipo-wiki/references/wiki-contract.md` righe 74-101 — il contratto delle pagine `type: decision`: frontmatter, `decision_status`, i cinque marcatori di sezione obbligatori, e la regola che le pagine di decisione richiedono evidenza di repository in `sources`.
+      - `Spikes/01-scale-memory/RESULT.md` § *Esito* e § *Conseguenze per la costruzione* — la sostanza della decisione e i valori misurati.
+      - `docs/wiki/architecture/context-map.md` sezione *Incertezze* — la voce che dichiara ADR-009 provvisorio, a cui questa pagina risponde.
+      - `docs/wiki/index.md` — per capire come il catalogo raggruppa i concetti; **non modificarlo a mano**, lo scrive la CLI.
+
+      ## Change
+      - Nuovo `docs/wiki/decisions/work-admission-budget.md`.
+      - `docs/wiki/index.md` — **solo** tramite `archetipo wiki catalog`, mai a mano.
+      - **Non-obiettivi:** nessun `wiki reset` in questo task, la pagina non esiste ancora e non ha stato di revisione da azzerare. Non toccare le altre quattro pagine: hanno un task ciascuna. Non modificare `docs/PRD.md`.
+
+      ## Steps
+      1. Crea `docs/wiki/decisions/work-admission-budget.md` con questo frontmatter, adattando i valori a quanto misurato:
+         - `type: decision`
+         - `title: Ammissione del lavoro con stime calibrate e banda di ritenzione`
+         - `description:` una riga che nomina la politica scelta e il fatto che è calibrata su misura.
+         - `decision_status: accepted`
+         - `status: generated`
+         - `sources:` con evidenza di repository reale, come il contratto richiede — `Spikes/01-scale-memory/RESULT.md` con `role: verification`, il file di `Spikes/01-scale-memory/measurements/` della misura di costo per elemento con `role: verification`, e `Spikes/01-scale-memory/Sources/BenchKit/RetentionBand.swift` con `role: implementation`. Non citare `docs/PRD.md` come implementazione: è intento, non evidenza.
+      2. Scrivi il corpo sotto i cinque marcatori obbligatori, nell'ordine del contratto, ciascuno con contenuto sostanziale:
+         - `<!-- archetipo:wiki section=context -->` — le forze: l'ammissione precede l'esecuzione quindi il costo va stimato e non misurato al momento dell'ammissione; le soglie del PRD erano dichiarate e non misurate; una media misurata non protegge dall'elemento anomalo; la memoria è il rischio di esaurimento silenzioso identificato dal PRD.
+         - `<!-- archetipo:wiki section=decision -->` — l'opzione scelta con i **valori misurati**: code specializzate per tipo sotto budget comune, stima adottata pari al p95 per cella, margine di sicurezza dichiarato, limite per singolo elemento con la sua formula, e la coppia di soglie della banda di ritenzione. Riporta le cifre da `RESULT.md`, non descrizioni qualitative.
+         - `<!-- archetipo:wiki section=alternatives -->` — almeno due alternative reali con il motivo dello scarto: punto unico di ammissione con stima per pixel, scartato perché i pixel non stimano il costo di un modello di visione o di un contenitore multipagina e perché concentra in un componente la conoscenza di ogni tipo di lavoro; rilascio immediato di ciò che esce dalla porta di vista senza banda, scartato con il costo di ricalcolo misurato dell'oscillazione piccola come prova; stima come media anziché p95, scartata con il massimo osservato nella cella degli anomali come prova.
+         - `<!-- archetipo:wiki section=consequences -->` — vantaggi e svantaggi, incluse le implicazioni operative: la banda è memoria occupata di proposito; le stime sono rivedibili con la misura a posteriori; il test di lunga durata è parte del contratto; e **il vincolo di attribuzione** — le cifre valgono per l'hardware dichiarato in `RESULT.md`, che ha 32 GB e non è il Mac con meno memoria in target, quindi il margine di sicurezza copre quello scarto e va rivisto quando si misurerà su una configurazione più piccola.
+         - `<!-- archetipo:wiki section=verification -->` — cita `Spikes/01-scale-memory/RESULT.md`, i file di `measurements/` e i sottocomandi del banco che producono l'evidenza.
+      3. Se `RESULT.md` ha registrato ADR-009 come **emendato**, la pagina descrive la politica **emendata** e dice esplicitamente in `context` che sostituisce la formulazione dichiarata nel PRD, citando entrambe. Non esiste una pagina `type: decision` precedente da marcare `superseded`: la ricerca in fase di pianificazione ha restituito zero pagine di decisione, quindi non c'è storia da collegare.
+      4. Ricostruisci il catalogo: `archetipo wiki catalog` da `/Users/gia/iMAGE_Surfer`. Non scrivere né riformattare `index.md` o `log.md` a mano — la CLI è l'unico scrittore.
+
+      ## Verify
+      - Esegui da `/Users/gia/iMAGE_Surfer`: `archetipo wiki validate`
+      - Attesa: `ok: true`, 6 pagine, nessun rilievo bloccante. La baseline registrava 5 pagine tutte valide: il conteggio sale a 6 e la validità resta.
+      - Esegui: `archetipo wiki status`
+      - Attesa: `decisions/work-admission-budget` presente con `state: generated` e nessun `issues`.
+      - Esegui: `grep -c "archetipo:wiki section=" docs/wiki/decisions/work-admission-budget.md`
+      - Attesa: 5 — i cinque marcatori del contratto delle decisioni.
+      - Esegui: `grep -q "decision_status: accepted" docs/wiki/decisions/work-admission-budget.md && echo ok-status`
+      - Attesa: stampa `ok-status`.
+      - Esegui: `git diff --stat docs/wiki/index.md`
+      - Attesa: `index.md` risulta modificato — dalla CLI, non a mano — e contiene una voce per la nuova pagina.
+
+      ## Done
+      - [ ] `docs/wiki/decisions/work-admission-budget.md` esiste con `type: decision`, `decision_status: accepted`, `status: generated` e i cinque marcatori di sezione tutti con contenuto sostanziale.
+      - [ ] Il cambiamento di conoscenza è registrato: la politica di ammissione passa da ipotesi provvisoria del PRD a decisione chiusa con valori misurati, con le cifre prese da `RESULT.md` e non descrizioni qualitative.
+      - [ ] `sources` cita evidenza di repository reale — `RESULT.md`, un file di `measurements/`, `RetentionBand.swift` — e non `docs/PRD.md` come implementazione.
+      - [ ] La sezione `consequences` dichiara il vincolo di attribuzione all'hardware di misura.
+      - [ ] `archetipo wiki validate` restituisce `ok: true` e `archetipo wiki status` riporta la pagina come `generated`.
+      - [ ] `index.md` è stato aggiornato da `archetipo wiki catalog` e non a mano.
+
+      ## Blockers
+      None.
+    ref: TASK-11
+  - id: TASK-12
+    title: Wiki - aggiorna overview con la comparsa del primo codice Swift e restringi l'ancoraggio
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-10
+    body: |-
+      ## Objective
+      La pagina `overview` non afferma più che il repository sia privo di codice sorgente, e il suo ancoraggio alle evidenze è restretto come la pagina stessa prescriveva.
+
+      ## Read
+      - `docs/wiki/overview.md` — in particolare la sezione *Stack* («lo stack è prescritto dal PRD e non ancora presente nel repository. Nessun manifest di build, nessuna configurazione di progetto e nessun file sorgente sono stati rilevati dall'ispezione») e la *Nota sull'ancoraggio delle evidenze* nella sezione *Ambito della mappa ed esclusioni* («appena esistono directory sorgente reali, l'ancoraggio va restretto a quelle directory»).
+      - `Spikes/01-scale-memory/Package.swift` e `Spikes/01-scale-memory/RESULT.md` — l'evidenza da citare.
+
+      ## Change
+      - `docs/wiki/overview.md` — sezioni *Stack* e *Ambito della mappa ed esclusioni*, e il frontmatter `sources`.
+      - **Non-obiettivi:** non toccare le altre pagine, hanno un task ciascuna. Non modificare a mano il blocco `review` — si usa `archetipo wiki reset`. Non riscrivere le sezioni *Scopo del sistema* e *Attori*: l'intento di prodotto non cambia per effetto di questo cancello.
+
+      ## Steps
+      1. **Primo passo, obbligatorio:** `archetipo wiki --project-root /Users/gia/iMAGE_Surfer reset overview` da `/Users/gia/iMAGE_Surfer`. Modificare una pagina `reviewed` la deriva a `stale`, e l'unica transizione che riporta a `generated` è il reset. Il comando è idempotente rispetto all'ordine e va eseguito anche se la pagina risulta già `generated`, perché lo stato può essere cambiato dopo la pianificazione.
+      2. Nella sezione *Stack*, correggi l'affermazione centrale: esiste ora codice Swift nel repository. La tabella dello stack ha una colonna «Stato nel repository» oggi valorizzata a `assente` su ogni riga: aggiorna **solo** le righe che il cancello dimostra, e distingui esplicitamente il **materiale di misura sotto `Spikes/`** dal **codice di prodotto, che continua a non esistere**. Le righe interessate sono almeno: Linguaggio (Swift 6.3.3 presente, usato dal banco), Anteprime e immagini (QuickLook Thumbnailing e ImageIO usati dal banco, con la cifra di confronto misurata), Visione artificiale (Vision usata come carico di misura). Lascia `assente` tutto ciò che il cancello non ha toccato — SwiftUI, GRDB, XPC, sidecar, osservazione del filesystem — e non dedurre presenza da intento.
+      3. Aggiungi una frase che registra il fatto nuovo e ne delimita la portata: il primo codice del repository è il banco di misura del cancello n°1, è dichiaratamente usa-e-getta, e non anticipa la struttura di pacchetti prevista dal PRD.
+      4. Aggiorna la *Nota sull'ancoraggio delle evidenze* applicando ciò che prescrive: la condizione «appena esistono directory sorgente reali» si è verificata. Riscrivila per dire che l'ancoraggio è ora restretto, e nel frontmatter `sources` **sostituisci** la voce `path: .` con `role: repository-inventory` con voci più precise: `Spikes/01-scale-memory` con `role: implementation` e `docs/PRD.md` con `role: product-intent`. L'ancoraggio alla radice esisteva per sostenere l'affermazione «non esiste codice»: caduta quell'affermazione, l'ancoraggio va restretto o la pagina diventerebbe `evidence-changed` a ogni file aggiunto in qualunque punto dell'albero.
+      5. Aggiorna la sezione *Stato dell'intento* dentro *Ambito della mappa ed esclusioni*: dei quattro cancelli, il n°1 ha ora un esito scritto. Nomina `Spikes/01-scale-memory/RESULT.md` e riporta in una riga se ADR-009 è risultato confermato o emendato, collegando `[Ammissione del lavoro con stime calibrate e banda di ritenzione](/decisions/work-admission-budget.md)`.
+      6. Aggiungi la nuova pagina di decisione all'elenco *Concetti collegati*.
+      7. Aggiorna il campo `description` del frontmatter solo se l'affermazione centrale della pagina è cambiata abbastanza da renderlo fuorviante; se lo modifichi, esegui `archetipo wiki catalog` per rigenerare `index.md`, mai a mano.
+
+      ## Verify
+      - Esegui da `/Users/gia/iMAGE_Surfer`: `archetipo wiki status`
+      - Attesa: `overview` riporta `state: generated` e nessun `issues`.
+      - Esegui: `archetipo wiki validate`
+      - Attesa: `ok: true`, nessun rilievo bloccante.
+      - Esegui: `grep -n "Nessun manifest di build" docs/wiki/overview.md`
+      - Attesa: nessun risultato — l'affermazione falsa non è più nella pagina.
+      - Esegui: `grep -n "path: \." docs/wiki/overview.md`
+      - Attesa: nessun risultato — l'ancoraggio alla radice è stato sostituito.
+      - Esegui: `grep -q "work-admission-budget" docs/wiki/overview.md && echo collegata`
+      - Attesa: stampa `collegata`.
+      - Esegui: `git diff --name-only docs/wiki`
+      - Attesa: solo `docs/wiki/overview.md` (più `index.md` se hai cambiato `description` ed eseguito `catalog`). Nessun'altra pagina toccata.
+
+      ## Done
+      - [ ] Il cambiamento di conoscenza è registrato: la pagina non afferma più che nessun file sorgente esista, e distingue il materiale di misura sotto `Spikes/` dal codice di prodotto che continua a non esistere.
+      - [ ] Le righe della tabella dello stack sono aggiornate **solo** dove il cancello porta evidenza; le altre restano `assente`.
+      - [ ] L'ancoraggio è restretto: `sources` non contiene più `path: .` e cita `Spikes/01-scale-memory`.
+      - [ ] La pagina nomina `Spikes/01-scale-memory/RESULT.md`, riporta l'esito su ADR-009 e collega `decisions/work-admission-budget`.
+      - [ ] Il primo passo eseguito è stato `archetipo wiki reset overview`; il blocco `review` non è stato modificato a mano.
+      - [ ] `archetipo wiki status` riporta `overview` come `state: generated` e `archetipo wiki validate` resta `ok: true`.
+
+      ## Blockers
+      None.
+    ref: TASK-12
+  - id: TASK-13
+    title: Wiki - aggiorna engineering/code-map con il primo codice mappato
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-10
+    body: |-
+      ## Objective
+      La pagina `engineering/code-map` non afferma più che il repository contenga un solo file e nessun codice, e rappresenta il banco del cancello n°1 come codice non appartenente a nessun dominio.
+
+      ## Read
+      - `docs/wiki/engineering/code-map.md` — le tre affermazioni che decadono: «la tabella è vuota per constatazione», «l'ispezione ha rilevato un solo file nel repository (`docs/PRD.md`)», «nessun codice non mappato»; e la nota di chiusura «va restretta alle directory sorgente reali appena esistono».
+      - La struttura effettiva di `Spikes/01-scale-memory/Sources/` e `Tests/` dopo i task precedenti.
+
+      ## Change
+      - `docs/wiki/engineering/code-map.md` — sezioni *Da dominio a codice*, *Codice non mappato*, *Copertura*, e il frontmatter `sources`.
+      - **Non-obiettivi:** **non creare pagine di dominio.** Il banco è materiale di misura usa-e-getta e non dimostra il comportamento di nessuna capacità di prodotto: promuoverlo a dominio significherebbe trasformare un'affermazione del PRD in un'osservazione di codice, esattamente ciò che la pagina evita per contratto. Non toccare le altre pagine.
+
+      ## Steps
+      1. **Primo passo, obbligatorio:** `archetipo wiki --project-root /Users/gia/iMAGE_Surfer reset engineering/code-map` da `/Users/gia/iMAGE_Surfer`.
+      2. Nella sezione *Da dominio a codice*, correggi la premessa. La tabella dei domini **resta vuota**, ma non più «per constatazione di assenza totale di codice»: riscrivi la motivazione come «esiste codice, e non appartiene a nessun dominio di prodotto». Sostituisci l'affermazione «l'ispezione ha rilevato un solo file nel repository (`docs/PRD.md`)» con lo stato reale.
+      3. Nella sezione *Codice non mappato*, aggiungi la voce che ora esiste: `Spikes/01-scale-memory/` — banco di misura del cancello n°1, pacchetto SwiftPM con la libreria `BenchKit` e gli eseguibili `gen-dataset` e `bench`, con la suite `BenchKitTests`. Dichiara nella stessa voce che è **deliberatamente fuori dalla mappa dei domini** e usa-e-getta, e collega `[Ammissione del lavoro con stime calibrate e banda di ritenzione](/decisions/work-admission-budget.md)` come la conoscenza durevole che ne è derivata: il codice è scartabile, la decisione che ha prodotto no.
+      4. Aggiorna il paragrafo sulla struttura di directory prevista dal PRD: continua a non esistere su disco, e va detto che `Spikes/` non la anticipa.
+      5. Nella sezione *Copertura*, sostituisci «l'ispezione ha restituito zero confini fisici e zero candidati di capacità» con lo stato reale: esistono ora file sorgente ma nessun confine di capacità di prodotto. Aggiorna la nota finale sull'ancoraggio applicandola: nel frontmatter `sources` sostituisci `path: .` con `Spikes/01-scale-memory` con `role: implementation`, mantenendo `docs` con `role: documentation-inventory`.
+      6. Se modifichi `description` nel frontmatter, esegui `archetipo wiki catalog` per rigenerare `index.md`, mai a mano.
+
+      ## Verify
+      - Esegui da `/Users/gia/iMAGE_Surfer`: `archetipo wiki status`
+      - Attesa: `engineering/code-map` riporta `state: generated` e nessun `issues`.
+      - Esegui: `archetipo wiki validate`
+      - Attesa: `ok: true`, nessun rilievo bloccante.
+      - Esegui: `grep -n "un solo file nel repository" docs/wiki/engineering/code-map.md`
+      - Attesa: nessun risultato.
+      - Esegui: `grep -n "path: \." docs/wiki/engineering/code-map.md`
+      - Attesa: nessun risultato — l'ancoraggio alla radice è stato sostituito.
+      - Esegui: `ls docs/wiki/domains 2>/dev/null | wc -l`
+      - Attesa: `0` oppure directory assente — nessuna pagina di dominio è stata creata.
+      - Esegui: `git diff --name-only docs/wiki`
+      - Attesa: solo `docs/wiki/engineering/code-map.md` (più `index.md` se hai cambiato `description`).
+
+      ## Done
+      - [ ] Il cambiamento di conoscenza è registrato: la pagina non afferma più che il repository contenga un solo file né che non esista codice non mappato.
+      - [ ] `Spikes/01-scale-memory/` è rappresentato come codice non mappato, dichiarato usa-e-getta e fuori dalla mappa dei domini, con collegamento a `decisions/work-admission-budget`.
+      - [ ] La tabella dei domini resta vuota e **nessuna pagina di dominio è stata creata**.
+      - [ ] L'ancoraggio è restretto: `sources` non contiene più `path: .`.
+      - [ ] Il primo passo eseguito è stato `archetipo wiki reset engineering/code-map`; il blocco `review` non è stato modificato a mano.
+      - [ ] `archetipo wiki status` riporta la pagina come `state: generated` e `archetipo wiki validate` resta `ok: true`.
+
+      ## Blockers
+      None.
+    ref: TASK-13
+  - id: TASK-14
+    title: Wiki - aggiorna operations/development con la toolchain esistente e l'esito del cancello n°1
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-10
+    body: |-
+      ## Objective
+      La pagina `operations/development` non afferma più che non esista alcuna toolchain, alcun comando di build o test, né nulla da eseguire, e registra l'esito del cancello n°1 nella tabella dei cancelli.
+
+      ## Read
+      - `docs/wiki/operations/development.md` — la sezione *Stato attuale* («nel repository non esiste alcuna toolchain… zero manifest, zero configurazioni, zero automazioni e zero test. Non esiste un comando di build, non esiste un comando di test, e non esiste nulla da eseguire»), la tabella dei quattro cancelli, e la frase finale della sezione *Esecuzione e vincoli operativi* («i valori numerici dei vincoli sono soglie dichiarate, non misure ottenute: il PRD li subordina all'esito del cancello n°1»).
+      - `Spikes/01-scale-memory/PROCEDURE.md` e `RESULT.md` — i comandi reali e l'esito.
+
+      ## Change
+      - `docs/wiki/operations/development.md` — sezioni *Stato attuale*, *Build previsto*, *Test previsti*, *Esecuzione e vincoli operativi*, e il frontmatter `sources`.
+      - **Non-obiettivi:** non descrivere come esistente la pipeline di integrazione continua — è fuori ambito per questa spec e continua a non esistere. Non promettere un controllo SwiftLint: la baseline ha rilevato `swiftlint` **assente** sulla macchina, mentre `swift format` è disponibile. Non toccare le altre pagine.
+
+      ## Steps
+      1. **Primo passo, obbligatorio:** `archetipo wiki --project-root /Users/gia/iMAGE_Surfer reset operations/development` da `/Users/gia/iMAGE_Surfer`.
+      2. Riscrivi la sezione *Stato attuale* con distinzione netta fra due cose che ora coesistono: esiste una toolchain **per il materiale dei cancelli** — un manifest SwiftPM, un comando di build, un comando di test e un banco da eseguire — e continua a non esistere alcuna toolchain **per il prodotto**: nessun progetto Xcode, nessun pacchetto sotto `Packages/`, nessuna automazione. Riporta i comandi reali: `swift build --package-path Spikes/01-scale-memory`, `swift test --package-path Spikes/01-scale-memory`, e i sottocomandi di `bench` come cosa da eseguire.
+      3. Nella tabella dei quattro cancelli, marca il n°1 come **concluso** con rimando a `Spikes/01-scale-memory/RESULT.md`, e riporta in una riga l'esito su ADR-009 — confermato oppure emendato. Gli altri tre cancelli restano aperti e la loro riga non cambia.
+      4. Nella sezione *Build previsto*, registra un vincolo scoperto dall'ambiente e utile a chiunque riprenda il lavoro: il materiale del cancello n°1 si costruisce con **SwiftPM senza Xcode**, perché su questa macchina è attiva solo l'istanza Command Line Tools e `xcodebuild` non è disponibile. `xcodebuild` resta previsto per il target applicativo del prodotto, che non esiste ancora: non cancellarlo, distinguilo.
+      5. Nella sezione *Test previsti*, aggiungi che la prima suite reale del repository è `BenchKitTests` sotto `Spikes/01-scale-memory`, eseguita con `swift test`, e che il test di lunga durata previsto in CI dal PRD **non è stato introdotto**: la sessione di lunga durata del cancello si esegue a mano e la pipeline resta da costruire. Correggi anche il riferimento a `swift-format` e SwiftLint per lo stile: SwiftLint non è installato e lo stile è oggi garantito da `swift format lint --strict`.
+      6. Nella sezione *Esecuzione e vincoli operativi*, la frase «i valori numerici dei vincoli sono soglie dichiarate, non misure ottenute» non è più vera per prima schermata, tetto di memoria e parallelismo. Riscrivila distinguendo i vincoli ora **misurati** — con la cifra e il rimando a `RESULT.md` — da quelli ancora dichiarati, che restano subordinati agli altri tre cancelli. Aggiungi l'attribuzione: le cifre valgono per l'hardware dichiarato in `RESULT.md`. Collega `[Ammissione del lavoro con stime calibrate e banda di ritenzione](/decisions/work-admission-budget.md)`.
+      7. Nel frontmatter `sources`, sostituisci `path: .` con `Spikes/01-scale-memory` con `role: implementation`, mantenendo `docs/PRD.md` con `role: product-intent`.
+      8. Aggiungi la pagina di decisione ai *Concetti collegati*. Se modifichi `description`, esegui `archetipo wiki catalog`, mai a mano.
+
+      ## Verify
+      - Esegui da `/Users/gia/iMAGE_Surfer`: `archetipo wiki status`
+      - Attesa: `operations/development` riporta `state: generated` e nessun `issues`.
+      - Esegui: `archetipo wiki validate`
+      - Attesa: `ok: true`, nessun rilievo bloccante.
+      - Esegui: `grep -n "non esiste alcuna toolchain" docs/wiki/operations/development.md`
+      - Attesa: nessun risultato, oppure un risultato che si riferisce esplicitamente al **prodotto** e non al repository nel suo insieme.
+      - Esegui: `grep -n "path: \." docs/wiki/operations/development.md`
+      - Attesa: nessun risultato.
+      - Esegui: `grep -q "swift build --package-path Spikes/01-scale-memory" docs/wiki/operations/development.md && echo comandi-presenti`
+      - Attesa: stampa `comandi-presenti`.
+      - Esegui: `git diff --name-only docs/wiki`
+      - Attesa: solo `docs/wiki/operations/development.md` (più `index.md` se hai cambiato `description`).
+
+      ## Done
+      - [ ] Il cambiamento di conoscenza è registrato: la pagina distingue la toolchain esistente del materiale dei cancelli da quella del prodotto, che continua a non esistere, e riporta i comandi reali di build, test ed esecuzione.
+      - [ ] La tabella dei cancelli marca il n°1 come concluso con l'esito su ADR-009 e il rimando a `RESULT.md`; gli altri tre restano aperti.
+      - [ ] È registrato il vincolo che il materiale del cancello si costruisce con SwiftPM senza Xcode, senza cancellare `xcodebuild` come strumento previsto per il prodotto.
+      - [ ] La pagina non promette un controllo SwiftLint, e nomina `swift format lint --strict` come controllo di stile effettivo.
+      - [ ] La pipeline di integrazione continua non è descritta come esistente.
+      - [ ] I vincoli ora misurati sono distinti da quelli ancora dichiarati, con attribuzione all'hardware di misura e collegamento a `decisions/work-admission-budget`.
+      - [ ] Il primo passo eseguito è stato `archetipo wiki reset operations/development`; il blocco `review` non è stato modificato a mano.
+      - [ ] `archetipo wiki status` riporta la pagina come `state: generated` e `archetipo wiki validate` resta `ok: true`.
+
+      ## Blockers
+      None.
+    ref: TASK-14
+  - id: TASK-15
+    title: Wiki - aggiorna architecture/context-map con ADR-009 chiuso e l'area Ammissione del lavoro calibrata
+    type: Impl
+    status: DONE
+    dependencies:
+      - TASK-10
+      - TASK-11
+    body: |-
+      ## Objective
+      La mappa dei contesti non elenca più ADR-009 fra gli ADR provvisori, e l'area prevista *Ammissione del lavoro* riporta l'evidenza che ora esiste — la sua politica misurata — restando priva di dominio.
+
+      ## Read
+      - `docs/wiki/architecture/context-map.md` — la riga *Ammissione del lavoro* della tabella delle aree previste, con evidenza «nessuna»; la sezione *Incertezze*, in particolare «Cinque ADR sono dichiarati provvisori dal PRD stesso… ADR-007 (recuperabilità dei lotti), 009 (code e budget), 011, 012 e 013 sono subordinati all'esito di quattro cancelli tecnici»; e l'ultima voce delle incertezze, che elenca gli assunti da validare, fra cui «costo in memoria per tipo di lavoro» e «ampiezza della banda di ritenzione».
+      - `docs/wiki/decisions/work-admission-budget.md` — la pagina creata in TASK-11, da collegare.
+      - `Spikes/01-scale-memory/RESULT.md` § *Esito* e § *Conseguenze per la costruzione*.
+
+      ## Change
+      - `docs/wiki/architecture/context-map.md` — la riga *Ammissione del lavoro* della tabella, la sezione *Infrastruttura condivisa* e la sezione *Incertezze*.
+      - **Non-obiettivi:** **non creare una pagina di dominio per l'area Ammissione del lavoro.** Esistono la decisione e le sue cifre, non il codice di prodotto che ne dimostri il comportamento: la pagina non assegna domini senza codice, e il banco è dichiaratamente usa-e-getta. Non toccare le righe delle altre undici aree previste, che restano senza evidenza. Non toccare le altre pagine Wiki. Il frontmatter `sources` di questa pagina resta ancorato a `.`: la sua affermazione centrale — nessun contesto è evidenziato da codice — è **ancora vera** e decade appunto quando compare codice di prodotto in qualunque punto dell'albero.
+
+      ## Steps
+      1. **Primo passo, obbligatorio:** `archetipo wiki --project-root /Users/gia/iMAGE_Surfer reset architecture/context-map` da `/Users/gia/iMAGE_Surfer`.
+      2. Nella tabella delle aree previste, aggiorna **solo** la riga *Ammissione del lavoro*. La colonna «Evidenza attuale» passa da «nessuna» a una descrizione precisa di ciò che ora esiste: nessun codice di prodotto, ma una politica misurata e chiusa, con rimando a `[Ammissione del lavoro con stime calibrate e banda di ritenzione](/decisions/work-admission-budget.md)`. Aggiorna anche la colonna «Responsabilità attesa» se le misure hanno cambiato la formulazione — per esempio se l'ampiezza della banda è ora un valore dichiarato invece di un'incognita.
+      3. Nella sezione *Infrastruttura condivisa*, la voce che descrive l'ammissione del lavoro come «code specializzate per tipo sotto una politica di budget comune con costi misurati» va allineata all'esito: i costi sono ora **stime calibrate su misura**, con i valori in `RESULT.md`. Se ADR-009 è risultato **emendato**, riporta qui la formulazione emendata e non quella del PRD.
+      4. Nella sezione *Incertezze*, il lavoro sostanziale:
+         a. La voce sui cinque ADR provvisori diventa una voce su **quattro**: rimuovi ADR-009 dall'elenco e aggiungi la frase che lo dichiara chiuso dal cancello n°1, con l'esito e il rimando. Non riscrivere la voce come se nulla fosse cambiato: la pagina dichiara questa come «la principale incertezza della mappa», e una delle cinque è caduta.
+         b. Nell'ultima voce, l'elenco degli assunti da validare: rimuovi «costo in memoria per tipo di lavoro» e «ampiezza della banda di ritenzione», ora misurati, e lascia intatti tutti gli altri.
+         c. Se `RESULT.md` ha registrato soglie **non supportabili**, aggiungile come nuova voce di incertezza con la modifica proposta al requisito: una soglia caduta non è un'incertezza risolta, è un vincolo nuovo.
+      5. Aggiungi la pagina di decisione all'elenco *Concetti collegati*.
+      6. Se modifichi `description` nel frontmatter — plausibile, perché contiene «cinque ADR sono ancora provvisori» — esegui `archetipo wiki catalog` per rigenerare `index.md`, mai a mano.
+
+      ## Verify
+      - Esegui da `/Users/gia/iMAGE_Surfer`: `archetipo wiki status`
+      - Attesa: `architecture/context-map` riporta `state: generated` e nessun `issues`.
+      - Esegui: `archetipo wiki validate`
+      - Attesa: `ok: true`, nessun rilievo bloccante.
+      - Esegui: `grep -n "Cinque ADR" docs/wiki/architecture/context-map.md`
+      - Attesa: nessun risultato — l'affermazione è stata sostituita con quella su quattro ADR.
+      - Esegui: `grep -c "ADR-009" docs/wiki/architecture/context-map.md`
+      - Attesa: almeno 1, in un contesto che lo dichiara chiuso e non provvisorio. Verifica leggendo la riga, non solo contandola.
+      - Esegui: `grep -q "work-admission-budget" docs/wiki/architecture/context-map.md && echo collegata`
+      - Attesa: stampa `collegata`.
+      - Esegui: `ls docs/wiki/domains 2>/dev/null | wc -l`
+      - Attesa: `0` oppure directory assente.
+      - Esegui: `git diff --name-only docs/wiki`
+      - Attesa: solo `docs/wiki/architecture/context-map.md` (più `index.md` se hai cambiato `description`).
+
+      ## Done
+      - [ ] Il cambiamento di conoscenza è registrato: ADR-009 non è più elencato fra gli ADR provvisori, e la voce dichiara che il cancello n°1 lo ha chiuso con il suo esito.
+      - [ ] La riga *Ammissione del lavoro* riporta l'evidenza che esiste — la politica misurata — e collega `decisions/work-admission-budget`; le altre undici righe non sono state toccate.
+      - [ ] Gli assunti «costo in memoria per tipo di lavoro» e «ampiezza della banda di ritenzione» sono stati rimossi dall'elenco di quelli da validare; gli altri restano.
+      - [ ] Le eventuali soglie non supportabili di `RESULT.md` sono registrate come nuova incertezza con la modifica proposta.
+      - [ ] **Nessuna pagina di dominio è stata creata** e il frontmatter resta ancorato a `.`, perché l'affermazione «nessun contesto è evidenziato da codice di prodotto» è ancora vera.
+      - [ ] Il primo passo eseguito è stato `archetipo wiki reset architecture/context-map`; il blocco `review` non è stato modificato a mano.
+      - [ ] `archetipo wiki status` riporta la pagina come `state: generated` e `archetipo wiki validate` resta `ok: true`.
+
+      ## Blockers
+      None.
+    ref: TASK-15
+  - id: TASK-16
+    title: Cancello finale - tracciabilità di RESULT.md, regressione completa e verifica dello stato dei task prima della revisione
+    type: Test
+    status: DONE
+    dependencies:
+      - TASK-01
+      - TASK-02
+      - TASK-03
+      - TASK-04
+      - TASK-05
+      - TASK-06
+      - TASK-07
+      - TASK-08
+      - TASK-09
+      - TASK-10
+      - TASK-11
+      - TASK-12
+      - TASK-13
+      - TASK-14
+      - TASK-15
+    body: |-
+      ## Objective
+      Ogni cifra di `RESULT.md` è dimostrata rintracciabile in un JSON versionato, la suite e i controlli di stile e di Wiki sono verdi, e nessun task resta `TODO` prima che la spec venga inviata in revisione.
+
+      ## Read
+      - `Spikes/01-scale-memory/RESULT.md` — il documento da verificare.
+      - I file di `Spikes/01-scale-memory/measurements/` — le sole fonti ammesse per le cifre del documento.
+      - La sezione *Baseline* del piano — le attese di ogni comando, per non promettere verde dove la baseline è rossa.
+
+      ## Change
+      - Nuovo `Spikes/01-scale-memory/Tests/BenchKitTests/ResultTraceabilityTests.swift`.
+      - **Non-obiettivi:** nessuna modifica a `RESULT.md`, alle pagine Wiki o al codice del banco in questo task. Se il controllo di tracciabilità trova una discrepanza, la correzione appartiene al task che ha prodotto il difetto — TASK-09 per le misure, TASK-10 per l'esito — e questo cancello riporta il difetto invece di rattopparlo.
+
+      ## Steps
+      1. Scrivi `ResultTraceabilityTests.swift`. È l'oracolo eseguibile dei criteri dimostrati da un documento, e verifica quattro cose leggendo `RESULT.md` e i JSON di `measurements/`:
+         a. **Esistenza dei riferimenti.** Estrai con espressione regolare ogni `measurementId` citato nel documento e pretendi che ognuno esista in almeno un file di `measurements/`. Un identificatore citato e assente è una cifra inventata.
+         b. **Corrispondenza delle cifre.** Per ogni tabella delle sezioni *Misure grezze* e *Stime di costo in memoria*, confronta i valori scritti con quelli del JSON corrispondente, con tolleranza pari alla precisione di arrotondamento dichiarata nel documento. Un valore che non combacia fallisce il test nominando riga e grandezza.
+         c. **Completezza dell'esito (AC-6).** Pretendi che esistano esattamente quattro voci di esito, una per `ADR-009`, `NFR-P1`, `NFR-P9`, `NFR-P10`, e che ciascuna porti **uno e un solo** marcatore fra **confermato** ed **emendato**. Pretendi che ogni voce **emendato** contenga un testo di sostituzione non vuoto e almeno un valore numerico.
+         d. **Coerenza dell'hardware (AC-7).** Pretendi che ogni file di `measurements/` riporti un blocco `host` con `model`, `physicalMemoryBytes` e `osBuildVersion` **identici** a quelli dichiarati in § *Hardware di misura*. È il controllo che rende verificabile il divieto di AC-7: una misura ripetuta su una configurazione diversa per ottenere una conferma comparirebbe qui come `host` divergente e farebbe fallire il cancello.
+         e. **Simmetria delle soglie non supportabili (AC-7).** Per ogni voce di esito marcata **emendato** perché una soglia dichiarata non è raggiunta, pretendi una voce corrispondente nella sezione *Soglie non supportabili*. Il controllo vale nei due versi: nessuna soglia mancata può mancare dalla sezione.
+      2. Esegui `swift format --in-place --recursive Spikes/01-scale-memory/Tests`.
+      3. Esegui i controlli finali nell'ordine sotto la voce *Verify*. Non dedurre la suite finale dalle convenzioni del progetto: sono elencati per intero perché la baseline ha rilevato che due strumenti attesi — `xcodebuild` e `swiftlint` — non esistono su questa macchina, e nessuno dei due va invocato.
+      4. Solo dopo che ogni controllo è verde, marca **questo** task come `DONE`.
+      5. Poi, e solo poi, ricarica la spec e verifica lo stato di tutti i task: `archetipo spec show US-001` da `/Users/gia/iMAGE_Surfer`. Nessun task deve risultare `TODO`.
+      6. Solo se nessun task è `TODO`, invoca `archetipo spec review US-001` da `/Users/gia/iMAGE_Surfer`. L'ordine è vincolante: eseguire i controlli, marcare questo task `DONE`, ricaricare la spec, confermare che nessun task è rimasto `TODO`, e soltanto allora chiedere la revisione. Chiedere la revisione con un task ancora `TODO` è un difetto di processo.
+
+      ## Verify
+      - Esegui: `swift build --package-path Spikes/01-scale-memory`
+      - Attesa: `Build complete!`, zero errori e **zero avvisi**. Tutti i file Swift del piano sono nuovi, quindi la soglia è zero diagnostiche e non «nessuna diagnostica nuova».
+      - Esegui: `swift test --package-path Spikes/01-scale-memory`
+      - Attesa: **tutti** i test verdi — unità di TASK-04, integrazione di TASK-08 e tracciabilità di questo task.
+      - Esegui: `swift format lint --strict --recursive Spikes/01-scale-memory/Sources Spikes/01-scale-memory/Tests`
+      - Attesa: stato 0, nessun rilievo.
+      - Esegui: `swift build` dalla radice del repository.
+      - Attesa: **resta rosso** con `error: Could not find Package.swift…`, esattamente come registrato nella baseline. È corretto e non va corretto: il repository non ha un pacchetto alla radice. Non trattarlo come regressione.
+      - **Non eseguire** `xcodebuild` né `swiftlint`: la baseline li ha rilevati assenti, e invocarli produrrebbe un rosso che non riguarda questo lavoro.
+      - Esegui da `/Users/gia/iMAGE_Surfer`: `archetipo wiki validate`
+      - Attesa: `ok: true`, 6 pagine, nessun rilievo bloccante (la baseline registrava 5 pagine valide).
+      - Esegui: `archetipo wiki status`
+      - Attesa: 6 pagine, **tutte** `generated`, nessuna `stale`, nessuna `attention`, nessun `issues`. Una pagina `stale` significa che un task l'ha modificata senza il `reset` iniziale.
+      - Esegui: `git status --porcelain`
+      - Attesa: solo i file previsti dal piano. In particolare nessun file dentro `Spikes/01-scale-memory/.data` o `runs` deve comparire come non tracciato.
+      - Esegui: `git check-ignore -q Spikes/01-scale-memory/.data && git check-ignore -q Spikes/01-scale-memory/runs && echo "dati esclusi"`
+      - Attesa: stampa `dati esclusi`.
+      - Esegui: `git ls-files Spikes/01-scale-memory/dataset.json Spikes/01-scale-memory/PROCEDURE.md Spikes/01-scale-memory/RESULT.md`
+      - Attesa: i tre percorsi vengono stampati — procedura, configurazione ed esito sono versionati.
+      - Esegui: `git diff --stat docs/PRD.md`
+      - Attesa: nessun output.
+      - Esegui da `/Users/gia/iMAGE_Surfer`: `archetipo spec show US-001`
+      - Attesa: nessun task con `status: TODO`.
+
+      ## Done
+      - [ ] AC-1 — `git check-ignore` conferma che dataset ed esecuzioni di scarto sono esclusi, e `git ls-files` conferma che `dataset.json`, `PROCEDURE.md` e `RESULT.md` sono versionati.
+      - [ ] AC-2 — il controllo di tracciabilità dimostra che ogni file di `measurements/` riporta lo stesso `host` dichiarato in § *Hardware di misura*.
+      - [ ] AC-3 — le quattro misure sono presenti nel documento con ripetizioni e dispersione, e i loro valori combaciano con i JSON versionati.
+      - [ ] AC-4 — ogni riga della tabella delle stime combacia con la misura che la calibra, citata per `measurementId`.
+      - [ ] AC-5 — le soglie di entrata e uscita dichiarate combaciano con la riga corrispondente dello spazzolamento.
+      - [ ] AC-6 — esistono esattamente quattro voci di esito, ciascuna con uno e un solo marcatore, e ogni voce **emendato** porta testo di sostituzione e valore numerico.
+      - [ ] AC-7 — ogni soglia mancata ha la sua voce fra le non supportabili, e nessun `measurements/` riporta un hardware diverso da quello dichiarato.
+      - [ ] `swift build` e `swift test` verdi con zero avvisi; `swift format lint --strict` a stato 0; `xcodebuild` e `swiftlint` non invocati.
+      - [ ] `archetipo wiki validate` `ok: true` su 6 pagine e `archetipo wiki status` tutte `generated`.
+      - [ ] Ordine rispettato: controlli eseguiti, questo task marcato `DONE`, `archetipo spec show US-001` ricaricata, nessun task `TODO`, e solo allora `archetipo spec review US-001`.
+
+      ## Blockers
+      None.
+    ref: TASK-16
