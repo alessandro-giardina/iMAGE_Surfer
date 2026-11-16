@@ -1,18 +1,20 @@
 ---
 type: operations
 title: Sviluppo e operatività
-description: Build, test, esecuzione e distribuzione previsti per iMAGE Surfer; esiste la sola toolchain SwiftPM del banco di misura del cancello n°1, nessuna toolchain di prodotto
+description: Build, test, esecuzione e distribuzione previsti per iMAGE Surfer; esistono solo le toolchain SwiftPM dei banchi dei cancelli tecnici sotto Spikes/, nessuna toolchain di prodotto né integrazione continua
 status: reviewed
 sources:
     - path: Spikes/01-scale-memory
       role: implementation
+    - path: Spikes/04-crash-recovery
+      role: implementation
     - path: docs/PRD.md
       role: product-intent
 review:
-    content_hash: sha256:806af40a25a6ba2e379bee61221719a8f25c9b5fdc35031906e698a740d17694
-    evidence_revision: c3e7f7d9925451c8cee411c629402c840b557f5f
-    evidence_hash: sha256:ea314d65f75b67107e022a7b3557f7a0363b6ebb74b3311bd435252ac8531640
-    reviewed_at: "2026-11-16T10:03:25Z"
+    content_hash: sha256:8beb24cc9a8bed874189bf19da43696286481c52902c1e5b986434f0bb372d4b
+    evidence_revision: 10ec6ad380b970b8afee728ac05a08f63794c9a4
+    evidence_hash: sha256:eff0fe57c51ac57e5d984aebf92dcdf4f80ad017b24b8ae35f2d67921e6bd336
+    reviewed_at: "2026-11-16T22:17:56Z"
 ---
 # Sviluppo e operatività
 
@@ -33,6 +35,21 @@ swift run   --package-path Spikes/01-scale-memory bench <sottocomando> --profile
 
 I sottocomandi di `bench` sono `first-screen`, `selection-latency`, `retention-band`, `scroll-memory` e `item-cost`. La sequenza completa, con prerequisiti e tempi, è in `Spikes/01-scale-memory/PROCEDURE.md`. I comandi si lanciano dalla radice del repository. Un `swift build` senza `--package-path` fallisce, perché la radice non ha un manifest.
 
+Il banco del cancello n°4 è un secondo pacchetto SwiftPM, `Spikes/04-crash-recovery/`, anch'esso senza dipendenze esterne e senza dipendenze da `Spikes/01-scale-memory`. Dalla radice del repository:
+
+```sh
+swift build --package-path Spikes/04-crash-recovery
+swift test  --package-path Spikes/04-crash-recovery
+Spikes/04-crash-recovery/.build/debug/crashbench setup
+Spikes/04-crash-recovery/.build/debug/crashbench run-matrix --profile full
+```
+
+- Si usa il binario `crashbench` e non `swift run`, che riformula lo stato di uscita: l'arresto deve restare visibile come stato 137 (`SIGKILL`). Il binario risolve fixture, dati ed esecuzioni dalla posizione dei propri sorgenti, quindi funziona anche dalla radice; i percorsi relativi della procedura presuppongono invece `Spikes/04-crash-recovery/`.
+- `swift test` monta più volumi di prova in parallelo, e va lanciato con un timeout di almeno 600 s.
+- La sequenza completa, con prerequisiti e tempi, è in `Spikes/04-crash-recovery/PROCEDURE.md`: dimostrazione manuale di un punto (arresto, stato, recupero, perturbazione e decisione dell'utente), matrice completa in un solo comando o in parti unite da `crashbench combine-matrix`, e chiusura con `crashbench teardown`.
+- **Prerequisito:** un'immagine disco APFS creata con `diskutil image`, incluso nel sistema, senza `sudo` e senza `hdiutil`, che su macOS 27.2 è deprecato. `crashbench setup` crea l'immagine se manca (`.data/work.asif`, formato ASIF, 64 MB, volume `CrashBench`) e la monta con `--nobrowse` sotto `.data/mnt`; `crashbench teardown` la espelle.
+- Il Cestino usato è quello del volume di lavoro, `.data/mnt/.Trashes/<uid>`, non quello dell'utente, che il banco non tocca mai.
+
 **Continua a non esistere alcuna toolchain per il prodotto.** Non c'è un progetto Xcode, non c'è un pacchetto sotto `Packages/`, non c'è alcuna automazione né pipeline di integrazione continua. Tutto ciò che segue sul prodotto è **prescritto dal PRD** e va verificato contro il repository quando la prima riga di codice di prodotto esisterà: [PRD di iMAGE Surfer](/references/prd.md).
 
 **Precedenza dichiarata dal PRD.** La costruzione completa è subordinata a quattro **cancelli tecnici** (Tappa 0), che vivranno sotto `Spikes/` insieme al proprio dataset, alla procedura di generazione e all'esito scritto:
@@ -42,11 +59,11 @@ I sottocomandi di `bench` sono `first-screen`, `selection-latency`, `retention-b
 | 1 | Prestazioni e memoria su 50.000 file, su dataset e hardware dichiarati — **concluso**: esito in `Spikes/01-scale-memory/RESULT.md`, ADR-009 **emendato** con valori misurati, NFR-P1 confermato, NFR-P9 e NFR-P10 emendati | ADR-009, e con esso NFR-P1, P9, P10 |
 | 2 | Eventi e identità su APFS, volume esterno, cartella sincronizzata, volume di rete — con mandato di concludere quali classi richiedono un meccanismo diverso, fino al supporto dichiarato come limitato | ADR-011, ADR-012 |
 | 3 | Round-trip XMP con Bridge, Lightroom, darktable, digiKam, **incluso uno scrittore che ignora il coordinamento di sistema** | ADR-013 |
-| 4 | Iniezione di arresti in ogni punto di un lotto, per stabilire quale dei **cinque esiti** si raggiunge e quali punti finiscono legittimamente in "bloccato in attesa dell'utente" | ADR-007 |
+| 4 | Iniezione di arresti in ogni punto di un lotto, per stabilire quale dei **cinque esiti** si raggiunge e quali punti finiscono legittimamente in "bloccato in attesa dell'utente" — **concluso**: esito in `Spikes/04-crash-recovery/RESULT.md`, ADR-007 **emendato** con sei esiti invece di cinque, «interrotto prima di agire» aggiunto e «compensato» ridefinito; finiscono in "bloccato" solo gli errori sistemici incontrati da un passo. Decisione: [Lotti di operazioni su file recuperabili con esiti dichiarati](/decisions/recoverable-file-batches.md) | ADR-007 |
 
 Ogni cancello ha mandato esplicito di poter concludere che **qualcosa non è supportabile**: è un esito legittimo e non un fallimento. Con la revisione 1.3 il PRD dichiara chiuse le revisioni dell'architettura sulla carta — le domande rimaste si chiudono misurando.
 
-Il materiale dei cancelli 1 e 2 non è versionabile (50.000 file, volumi di prova esterni e di rete): il repository ne versiona la procedura di generazione e configurazione, non i dati.
+Il materiale dei cancelli 1 e 2 non è versionabile (50.000 file, volumi di prova esterni e di rete): il repository ne versiona la procedura di generazione e configurazione, non i dati. Il materiale del cancello 4 è invece versionato: le fixture del lotto in `Spikes/04-crash-recovery/fixtures/` e la misura citata da `RESULT.md` in `Spikes/04-crash-recovery/measurements/`. Non sono versionati l'immagine disco e lo stato del banco (`.data/`) né le esecuzioni di scarto (`runs/`).
 
 <!-- archetipo:wiki section=build -->
 
@@ -67,11 +84,21 @@ Il materiale dei cancelli 1 e 2 non è versionabile (50.000 file, volumi di prov
 
 ## Test previsti
 
-**Stato reale.** La prima suite reale del repository è `BenchKitTests`, sotto `Spikes/01-scale-memory`, eseguita con `swift test --package-path Spikes/01-scale-memory`. Copre tre ambiti:
+**Stato reale.** Le suite reali del repository sono due, una per banco, ed entrambe si eseguono a mano.
+
+`BenchKitTests`, sotto `Spikes/01-scale-memory`, si esegue con `swift test --package-path Spikes/01-scale-memory`. Copre tre ambiti:
 
 - la statistica delle ripetizioni, il campionatore di memoria e il generatore del dataset;
 - l'integrazione del banco su un profilo ridotto;
 - la tracciabilità di ogni cifra di `RESULT.md` verso i JSON versionati.
+
+`CrashKitTests`, sotto `Spikes/04-crash-recovery`, si esegue con `swift test --package-path Spikes/04-crash-recovery`. Copre fra l'altro:
+
+- l'idempotenza dei passi: `execute` e `compensate` ripetuti agiscono una volta sola, per ogni tipo di operazione;
+- la classificazione degli errori per ambito su errori reali del volume di lavoro, prodotti dalle otto perturbazioni;
+- la raggiungibilità dei cinque esiti, asserita sull'istantanea del disco e non sulla riga `ESITO` stampata dal recupero;
+- l'arresto per `SIGKILL` sul binario reale `crashbench`, osservato dal processo padre, con il recupero in un nuovo processo;
+- la tracciabilità di `RESULT.md` verso la misura versionata in `measurements/`, in entrambe le direzioni.
 
 Il **test di lunga durata previsto in CI dal PRD non è stato introdotto**: la sessione di lunga durata del cancello (`bench scroll-memory --long-session 60`) si esegue a mano, e la pipeline resta da costruire. Ciò che segue è la strategia prescritta per il prodotto.
 
@@ -79,7 +106,10 @@ Il **test di lunga durata previsto in CI dal PRD non è stato introdotto**: la s
 - XCUITest sui percorsi critici di navigazione da tastiera, che il PRD identifica come contratto d'uso primario e quindi come superficie da coprire con test di interfaccia.
 - Fixture versionate nel repository come difesa sui casi limite: raffiche reali, duplicati byte-identici, immagini senza EXIF, HEIC, orientamenti EXIF non standard, sidecar XMP prodotti da strumenti di terze parti.
 - **Test di lunga durata** su cartella generata di grandi dimensioni, eseguiti in CI su ramo principale e prima di ogni rilascio, con soglie di fallimento dichiarate su: occupazione di memoria di picco, crescita dell'occupazione nel tempo, e numero di riconciliazioni prodotte da una raffica sintetica di eventi del filesystem. Il PRD li tratta come parte del contratto architetturale (ADR-009, ADR-012) e non come test facoltativi.
-- **Test di iniezione di arresti** sui lotti di operazioni su file, eseguiti a ogni push: interrompono il lotto in ogni punto e verificano quale dei cinque esiti dichiarati viene raggiunto. Sono la verifica del contratto di ADR-007, che promette **recuperabilità e non atomicità**, e nemmeno la conclusione garantita: la proprietà da testare è che l'app riconosca sempre lo stato raggiunto e sappia nominare ciò che richiede intervento umano.
+- **Test di iniezione di arresti** sui lotti di operazioni su file, eseguiti a ogni push: interrompono il lotto in ogni punto e verificano quale degli esiti dichiarati viene raggiunto, cinque nel PRD e sei dopo l'emendamento di ADR-007. Sono la verifica del contratto di ADR-007, che promette **recuperabilità e non atomicità**, e nemmeno la conclusione garantita: la proprietà da testare è che l'app riconosca sempre lo stato raggiunto e sappia nominare ciò che richiede intervento umano.
+  - **Stato reale:** il meccanismo esiste come banco del cancello n°4 (`Spikes/04-crash-recovery/`, `crashbench run-matrix`), eseguito a mano e non in integrazione continua.
+  - La sua esecuzione a ogni push resta una prescrizione del PRD per la Tappa 3, fuori dall'ambito del cancello.
+  - `RESULT.md` (§ *Conseguenze per la costruzione*) chiede di correggere prima il riempimento del volume della perturbazione `G-space-exhausted`, che non è affidabile.
 - **Corpus di file malformati** (troncati, corrotti, con intestazioni incoerenti) nei test a ogni push: verifica che nessun file non fidato interrompa il caricamento della cartella. È una delle condizioni a cui ADR-016 subordina l'accettazione del rischio di decodifica in un processo non isolato.
 
 <!-- archetipo:wiki section=runtime -->
@@ -103,7 +133,7 @@ Il **test di lunga durata previsto in CI dal PRD non è stato introdotto**: la s
   | Parallelismo e stime per elemento | Stime al p95 per tipo di lavoro, formato e classe, con margine 1,5, riserva fissa per la visione, limite per elemento e banda di ritenzione 0,5/1,0 schermate |
 
   Il dettaglio della politica è in [Ammissione del lavoro con stime calibrate e banda di ritenzione](/decisions/work-admission-budget.md).
-- **Vincoli ancora dichiarati, non misurati:** quiete a riposo, latenza della riconciliazione sotto raffica di eventi, aggiornamento del pannello metadati. Restano subordinati agli altri tre cancelli e alla costruzione.
+- **Vincoli ancora dichiarati, non misurati:** quiete a riposo, latenza della riconciliazione sotto raffica di eventi, aggiornamento del pannello metadati. Restano subordinati ai cancelli n°2 e n°3, ancora aperti, e alla costruzione.
 
 <!-- archetipo:wiki section=deployment -->
 

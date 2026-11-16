@@ -1,0 +1,11 @@
+{
+  "batchId": "lotto-di-prova",
+  "root": "lotto",
+  "operations": [
+    { "id": "OP1", "kind": "rename", "stem": "IMG_0001", "to": "2026-08-24_evento_001" },
+    { "id": "OP2", "kind": "move", "stem": "IMG_0002", "to": "selezione/IMG_0002" },
+    { "id": "OP3", "kind": "move", "stem": "IMG_0003", "to": "selezione/2026-08-24_evento_003" },
+    { "id": "OP4", "kind": "copy", "stem": "IMG_0004", "to": "consegna/IMG_0004" },
+    { "id": "OP5", "kind": "trash", "stem": "IMG_0005" }
+  ]
+}

@@ -1,7 +1,7 @@
 ---
 type: context-map
 title: Mappa dei contesti
-description: Confini logici di iMAGE Surfer; nessun contesto è evidenziato da codice di prodotto, le dodici aree previste dal PRD sono registrate come non risolte, ADR-009 è chiuso dal cancello n°1 e quattro ADR restano provvisori
+description: Confini logici di iMAGE Surfer; nessun contesto è evidenziato da codice di prodotto, le dodici aree previste dal PRD sono registrate come non risolte, ADR-009 e ADR-007 sono chiusi dai cancelli n°1 e n°4 e tre ADR restano provvisori
 status: reviewed
 sources:
     - path: .
@@ -9,10 +9,10 @@ sources:
     - path: docs/PRD.md
       role: product-intent
 review:
-    content_hash: sha256:f90557d3528c79d5882c1ea6b937a4105ca6c2ad9207f0dc12174e8cb0123e81
-    evidence_revision: c3e7f7d9925451c8cee411c629402c840b557f5f
-    evidence_hash: sha256:32c58789514ce568179732b636bd941db0b8ced2a0a33ab0e95d659268f13bec
-    reviewed_at: "2026-11-16T10:03:25Z"
+    content_hash: sha256:63a8d293e32eb8aed28cdb04b9aad6f3c26ce51babce6b64bb47690952d58060
+    evidence_revision: 10ec6ad380b970b8afee728ac05a08f63794c9a4
+    evidence_hash: sha256:4422a828b91c38466ddc20d56ff6153b646cf3a39283458f6efc13b62a1e19c4
+    reviewed_at: "2026-11-16T22:17:56Z"
 ---
 # Mappa dei contesti
 
@@ -20,7 +20,7 @@ review:
 
 ## Contesti
 
-**Nessun contesto delimitato e nessun candidato di capacità è oggi supportato da evidenza di codice di prodotto.** Non esistono sorgenti di prodotto, punti di ingresso dell'applicazione o schemi. L'unico codice del repository è il banco di misura usa-e-getta del cancello n°1 (`Spikes/01-scale-memory/`), deliberatamente fuori dalla mappa dei domini: vedi [Mappa del codice](/engineering/code-map.md).
+**Nessun contesto delimitato e nessun candidato di capacità è oggi supportato da evidenza di codice di prodotto.** Non esistono sorgenti di prodotto, punti di ingresso dell'applicazione o schemi. L'unico codice del repository sono i banchi di misura usa-e-getta dei cancelli tecnici, quello del cancello n°1 (`Spikes/01-scale-memory/`) e quello del cancello n°4 (`Spikes/04-crash-recovery/`), deliberatamente fuori dalla mappa dei domini: vedi [Mappa del codice](/engineering/code-map.md).
 
 Le aree di capacità **previste** dal PRD sono elencate qui sotto come attese di progettazione, non come contesti. Non hanno una pagina di dominio propria, e non ne avranno una fino a quando esisterà codice che ne dimostri il comportamento.
 
@@ -34,9 +34,9 @@ Le aree di capacità **previste** dal PRD sono elencate qui sotto come attese di
 | Duplicati | duplicati esatti per contenuto a stadi di costo crescente e gruppi di quasi-duplicati | nessuna |
 | Qualità e selezione | soggetto, qualità tecnica, punteggio estetico, punteggio scomposto con sovrapposizioni dichiarate e versionamento semantico | nessuna |
 | Accesso al filesystem | punto unico di scrittura, bookmark delle cartelle, richiesta contestuale dei permessi. Confine **di codice**, non di sicurezza | nessuna |
-| Operazioni su file | macchina a stati con log di intenti, ricontrollo delle precondizioni, passi idempotenti, **cinque esiti**, distinzione errore locale/sistemico, Cestino | nessuna |
+| Operazioni su file | lotto recuperabile e non atomico: macchina a stati con log di intenti scritto prima dell'azione, ricontrollo delle precondizioni, passi idempotenti; **sei esiti**, i cinque del PRD con «compensato» che riporta all'origine ogni passo eseguito e dichiara gli scostamenti, più «interrotto prima di agire»; stato riconosciuto **dal disco** e file cercati per digest, anche nel Cestino; errori **classificati per ambito**, nell'ordine volume, scrittura, spazio e cause locali e mai dal solo errno: tre classi sistemiche sospendono il lotto, cinque locali fanno saltare il file; eliminazioni dal Cestino | nessun codice di prodotto, ma una **semantica di recupero misurata e chiusa** dal cancello n°4: [Lotti di operazioni su file recuperabili con esiti dichiarati](/decisions/recoverable-file-batches.md) |
 | Cache derivata | archivio eliminabile dei soli dati ricalcolabili; **non autorevole**, può restare indietro ed essere riallineata | nessuna |
-| Stato durevole | archivio non eliminabile **con contratto operativo proprio** (integrità, recupero da corruzione, retention limitata, disco pieno definito): registro, lotti aperti, scritture in attesa o fallite, stato di sincronizzazione | nessuna |
+| Stato durevole | archivio non eliminabile **con contratto operativo proprio** (integrità, recupero da corruzione, retention limitata, disco pieno definito): registro, lotti aperti, scritture in attesa o fallite, stato di sincronizzazione | nessuna. Il cancello n°4 ha usato un registro sostitutivo, un file JSONL scritto con una sola `write(2)` per record seguita da `F_FULLFSYNC`, e **non** prova il contratto operativo di durabilità di ADR-003. La frase di ADR-007 «il registro vive in `DurableState`» resta quella del PRD, non verificata |
 | Interfaccia | griglia, anteprima grande, pannello metadati, mappa dei tasti | nessuna |
 
 <!-- archetipo:wiki section=relationships -->
@@ -68,7 +68,7 @@ Il vocabolario dei contratti è dichiarato e va rispettato quando la Wiki descri
 ## Incertezze
 
 - **Tutti i confini sono non risolti.** Le aree previste derivano dalla struttura di pacchetti proposta nel PRD, che è una proposta architetturale e non una constatazione. La loro effettiva granularità si deciderà su codice. Due revisioni successive hanno modificato l'elenco — la 1.1 ha estratto sidecar, pianificazione del lavoro e accesso al filesystem; la 1.2 ha scisso l'indice in due archivi — segno che la granularità proposta è ancora instabile.
-- **Quattro ADR restano provvisori.** Il PRD ne dichiarava provvisori cinque, subordinati all'esito di quattro cancelli tecnici che precedono la costruzione. Uno è ora chiuso: **ADR-009** (code e budget) ha un esito scritto dal cancello n°1, ed è **emendato** con valori misurati (`Spikes/01-scale-memory/RESULT.md`, [Ammissione del lavoro con stime calibrate e banda di ritenzione](/decisions/work-admission-budget.md)). Restano subordinati ai tre cancelli ancora aperti ADR-007 (recuperabilità dei lotti), 011 (identità e matrice dei casi), 012 (eventi del filesystem) e 013 (sidecar XMP). Finché quei cancelli non producono un esito scritto, le aree che ne dipendono non sono solo prive di codice: sono prive di una decisione chiusa. Resta la principale incertezza della mappa, ridotta di un ADR.
+- **Tre ADR restano provvisori.** Il PRD ne dichiarava provvisori cinque, subordinati all'esito di quattro cancelli tecnici che precedono la costruzione. Due sono ora chiusi. **ADR-009** (code e budget) ha un esito scritto dal cancello n°1, ed è **emendato** con valori misurati (`Spikes/01-scale-memory/RESULT.md`, [Ammissione del lavoro con stime calibrate e banda di ritenzione](/decisions/work-admission-budget.md)). **ADR-007** (recuperabilità dei lotti) ha un esito scritto dal cancello n°4, ed è **emendato**: sei esiti invece di cinque, «compensato» ridefinito come ritorno all'origine di ogni passo con gli scostamenti dichiarati, file modificato dall'esterno e Cestino svuotato misurati come errori locali su un solo file (`Spikes/04-crash-recovery/RESULT.md`, [Lotti di operazioni su file recuperabili con esiti dichiarati](/decisions/recoverable-file-batches.md)). L'esito vale per un solo volume APFS locale su immagine disco e per l'arresto del processo con `SIGKILL`: non copre la perdita di alimentazione né il contratto di `DurableState`. Restano subordinati ai cancelli n°2 e n°3, ancora aperti, ADR-011 (identità e matrice dei casi), 012 (eventi del filesystem) e 013 (sidecar XMP). Finché quei cancelli non producono un esito scritto, le aree che ne dipendono non sono solo prive di codice: sono prive di una decisione chiusa. Resta la principale incertezza della mappa, ridotta di due ADR.
 - **Una soglia del PRD è risultata non supportabile.** Su questa configurazione la sessione di lunga durata **cresce**: 6,75 MB/h, con intervallo di confidenza al 95% da 3,19 a 10,32 MB/h, distinguibile da zero. La parte di NFR-P9 «una sessione di lunga durata non mostra crescita monotona» è quindi registrata come non supportabile. La modifica proposta è una pendenza massima dichiarata di 16 MB/h su 60 minuti, sotto un tetto di picco di 560 MB. L'origine della crescita non è stata isolata. È un vincolo nuovo per l'area *Ammissione del lavoro* e per il test di lunga durata, non un'incertezza risolta.
 - **Il confine più incerto è quello tra sidecar, cache e stato durevole.** Il PRD descrive tre sedi dello stesso giudizio con garanzie diverse, un invariante direzionale di autorità, uno stato di sincronizzazione esplicito e conflitti non risolvibili in silenzio nemmeno verso applicazioni che non si coordinano. Se sul codice quella macchina a stati risultasse sostanziale, la sincronizzazione dei giudizi diventerebbe una capacità a sé e non un dettaglio di tre componenti.
 - **Il perimetro di sicurezza non coincide con nessun confine di questa mappa.** `Access` è un confine di codice; il processo resta unico, non in sandbox, e interpreta dati non fidati. ADR-016 registra il rischio come accettato per l'MVP e prevede l'isolamento futuro di decodifica e analisi in un processo separato: quando arriverà, sarà il primo confine **di sicurezza** del sistema e taglierà la mappa in modo trasversale alle aree qui elencate.
@@ -79,3 +79,4 @@ Il vocabolario dei contratti è dichiarato e va rispettato quando la Wiki descri
 - [Panoramica](/overview.md)
 - [Mappa del codice](/engineering/code-map.md)
 - [Ammissione del lavoro con stime calibrate e banda di ritenzione](/decisions/work-admission-budget.md) — ADR-009 chiuso dal cancello n°1
+- [Lotti di operazioni su file recuperabili con esiti dichiarati](/decisions/recoverable-file-batches.md) — ADR-007 chiuso dal cancello n°4

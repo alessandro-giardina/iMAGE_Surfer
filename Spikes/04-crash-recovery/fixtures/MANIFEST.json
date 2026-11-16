@@ -1,0 +1,59 @@
+{
+  "files" : [
+    {
+      "path" : "batch.json",
+      "sha256" : "e0d089dc018a03a7c624c048507e5f1438762492d12d8948850d9e60286ef826",
+      "size" : 490
+    },
+    {
+      "path" : "folder/IMG_0001.jpg",
+      "sha256" : "ede0822978f72291456683c4a1c6e6af8f4cb475f644f2bd426705cb02e6f6a5",
+      "size" : 837
+    },
+    {
+      "path" : "folder/IMG_0001.xmp",
+      "sha256" : "f8f756575505394bbb8a804087c1f012cf8e9852aaea63843da62ded7fd4c5af",
+      "size" : 263
+    },
+    {
+      "path" : "folder/IMG_0002.jpg",
+      "sha256" : "dec2e434c1b17b8141b99b302c1b0299b28403c0728514e461a680c9f776d1e1",
+      "size" : 831
+    },
+    {
+      "path" : "folder/IMG_0002.xmp",
+      "sha256" : "800bede41562e46ccb51e9d14c3627e092ea0ed81e20d3c1e453f9db1ebbdb96",
+      "size" : 263
+    },
+    {
+      "path" : "folder/IMG_0003.jpg",
+      "sha256" : "7dae26055bacb23e9fb7167ad232ecff4294f910270c29f7cbc014e7da0a8b58",
+      "size" : 828
+    },
+    {
+      "path" : "folder/IMG_0003.xmp",
+      "sha256" : "a92664c6a572609aa74457165d0f484c1fdd529f2e2148df39db660db25fd698",
+      "size" : 263
+    },
+    {
+      "path" : "folder/IMG_0004.jpg",
+      "sha256" : "8a39f24a7a339218e697ffd95eb78bf97625585e70187acc569fed8ea0f6b9fe",
+      "size" : 831
+    },
+    {
+      "path" : "folder/IMG_0004.xmp",
+      "sha256" : "a1d81f7cbba8eec8b506bc01c9164e75076b434c4c8158edfc01199f810dc409",
+      "size" : 263
+    },
+    {
+      "path" : "folder/IMG_0005.jpg",
+      "sha256" : "c9bc06d40bab6590c464db5373a58939b47fdbd0c150bc85e282d9101d68a297",
+      "size" : 837
+    },
+    {
+      "path" : "folder/IMG_0005.xmp",
+      "sha256" : "280250104ca94abc35283b9de9ef51d6131334895c6fe034c4be02b9286dd706",
+      "size" : 263
+    }
+  ]
+}

@@ -6,13 +6,15 @@ status: reviewed
 sources:
     - path: Spikes/01-scale-memory
       role: implementation
+    - path: Spikes/04-crash-recovery
+      role: implementation
     - path: docs/PRD.md
       role: product-intent
 review:
-    content_hash: sha256:4b0ca2fb5582f5e402499498dc0689cb9fc6f6a45849da1af899067a9a481b6b
-    evidence_revision: c3e7f7d9925451c8cee411c629402c840b557f5f
-    evidence_hash: sha256:ea314d65f75b67107e022a7b3557f7a0363b6ebb74b3311bd435252ac8531640
-    reviewed_at: "2026-11-16T10:03:25Z"
+    content_hash: sha256:ebfc506b6934126a56b65a6bf1eff9b5cce54db968671efd19ada5641f4fdf2c
+    evidence_revision: 10ec6ad380b970b8afee728ac05a08f63794c9a4
+    evidence_hash: sha256:eff0fe57c51ac57e5d984aebf92dcdf4f80ad017b24b8ae35f2d67921e6bd336
+    reviewed_at: "2026-11-16T22:17:56Z"
 ---
 # iMAGE Surfer
 
@@ -46,9 +48,12 @@ Dichiarati nel PRD, non verificabili su codice:
 
 ## Stack
 
-Lo stack è **prescritto dal PRD**, e il **codice di prodotto continua a non esistere**. Nel repository esiste però codice Swift: il **banco di misura del cancello tecnico n°1**, sotto `Spikes/01-scale-memory/`. È un pacchetto SwiftPM con un manifest (`Package.swift`), la libreria `BenchKit`, gli eseguibili `gen-dataset` e `bench` e la suite `BenchKitTests`.
+Lo stack è **prescritto dal PRD**, e il **codice di prodotto continua a non esistere**. Nel repository esistono però **due pacchetti Swift di verifica**, entrambi pacchetti SwiftPM sotto `Spikes/`:
 
-È il primo codice del repository. È **dichiaratamente usa-e-getta** e non anticipa la struttura di pacchetti prevista dal PRD. Code, cache di anteprime e banda di ritenzione vi esistono nella forma minima che serve a misurarle.
+- `Spikes/01-scale-memory/`, il **banco di misura del cancello tecnico n°1**: la libreria `BenchKit`, gli eseguibili `gen-dataset` e `bench` e la suite `BenchKitTests`;
+- `Spikes/04-crash-recovery/`, il **banco del cancello tecnico n°4**: la libreria `CrashKit`, l'eseguibile `crashbench` e la suite `CrashKitTests`, senza dipendenze esterne e senza dipendenze dal primo pacchetto.
+
+Entrambi sono **dichiaratamente usa-e-getta** e non anticipano la struttura di pacchetti prevista dal PRD. Nel primo, code, cache di anteprime e banda di ritenzione esistono nella forma minima che serve a misurarle; nel secondo, macchina a stati, registro e classificatori.
 
 La colonna «Stato nel repository» distingue questo **materiale di misura sotto `Spikes/`** dal codice di prodotto. Una riga cambia solo dove il cancello dimostra l'uso della tecnologia.
 
@@ -64,7 +69,7 @@ La colonna «Stato nel repository» distingue questo **materiale di misura sotto
 | Coordinamento tra processi | `NSFileCoordinator` per gli accessi concorrenti al sidecar — **cooperativo**, non impositivo | assente |
 | Isolamento di processo | XPC — **non usato nell'MVP**, registrato come innesto previsto per isolare la decodifica di dati non fidati (ADR-016) | assente |
 | Persistenza | SQLite tramite GRDB.swift 7.x, in **due file distinti** con impostazioni di durabilità diverse (cache derivata, stato durevole); sidecar XMP (schema Basic) per i giudizi | assente |
-| Test | Swift Testing, XCUITest, lunga durata su memoria ed eventi, iniezione di arresti sui lotti, corpus di file malformati | Swift Testing presente nella sola suite del banco (`BenchKitTests`). La sessione di memoria di lunga durata esiste come sottocomando del banco, eseguito a mano. Tutto il resto assente |
+| Test | Swift Testing, XCUITest, lunga durata su memoria ed eventi, iniezione di arresti sui lotti, corpus di file malformati | Swift Testing presente nelle sole suite dei due banchi (`BenchKitTests`, `CrashKitTests`). La sessione di memoria di lunga durata esiste come sottocomando del banco del cancello n°1, eseguito a mano. L'iniezione di arresti su un lotto esiste come banco del cancello n°4 (`crashbench`, suite `CrashKitTests`), eseguito a mano e **non** in una pipeline di integrazione continua. Lunga durata sugli eventi, XCUITest, integrazione continua e corpus di file malformati assenti |
 
 <!-- archetipo:wiki section=scope -->
 
@@ -85,13 +90,19 @@ Il PRD dichiara **provvisori** gli ADR-007, 009, 011, 012 e 013 fino all'esito d
 - NFR-P1 è confermato con il percorso ImageIO;
 - NFR-P9 ed NFR-P10 sono emendati.
 
-Gli altri tre cancelli restano aperti, e con loro gli ADR-007, 011, 012 e 013. La parte dell'intento che ne dipende è ancora un'ipotesi in attesa di verifica, non una decisione chiusa.
+Anche il **cancello n°4 ha un esito scritto**, in `Spikes/04-crash-recovery/RESULT.md`:
+
+- ADR-007 è **emendato**: [Lotti di operazioni su file recuperabili con esiti dichiarati](/decisions/recoverable-file-batches.md). Gli esiti dichiarati diventano sei, con l'aggiunta di «interrotto prima di agire»; «compensato» significa che ogni passo eseguito è riportato all'origine, con gli scostamenti dichiarati, e non che il disco torni allo stato di partenza; file modificato dall'esterno e Cestino svuotato sono errori locali su un solo file;
+- il testo di sostituzione è proposto in `RESULT.md` e non è applicato al PRD;
+- il contratto di durabilità di `DurableState` (ADR-003) non è provato da questo cancello, che ha usato un registro JSONL.
+
+Restano aperti i cancelli n°2 e n°3, e con loro gli ADR-011, 012 e 013. La parte dell'intento che ne dipende è ancora un'ipotesi in attesa di verifica, non una decisione chiusa.
 
 **Esclusioni riportate dall'ispezione:** metadati del repository, directory di dipendenze e build, radice della Wiki configurata.
 
 **Aree non ispezionate:** l'inventario Git non era disponibile e l'ispezione ha usato la ricalibrazione da filesystem. Il progetto non è un repository Git al momento della compilazione.
 
-**Nota sull'ancoraggio delle evidenze.** Le pagine core citavano la radice del progetto (`.`) come sorgente tracciata perché la loro affermazione centrale era *non esiste ancora codice implementato*, e quell'affermazione sarebbe decaduta alla comparsa di codice in qualunque punto dell'albero. La condizione prevista si è verificata: esiste la directory sorgente reale `Spikes/01-scale-memory`. L'ancoraggio di questa pagina è quindi **ristretto** a quella directory, con ruolo di implementazione, e al PRD, con ruolo di intento. Quando comparirà il codice di prodotto, le sue directory si aggiungeranno come sorgenti.
+**Nota sull'ancoraggio delle evidenze.** Le pagine core citavano la radice del progetto (`.`) come sorgente tracciata perché la loro affermazione centrale era *non esiste ancora codice implementato*, e quell'affermazione sarebbe decaduta alla comparsa di codice in qualunque punto dell'albero. La condizione prevista si è verificata: esistono le directory sorgente reali `Spikes/01-scale-memory` e `Spikes/04-crash-recovery`. L'ancoraggio di questa pagina è quindi **ristretto** a quelle due directory, con ruolo di implementazione, e al PRD, con ruolo di intento. Quando comparirà il codice di prodotto, le sue directory si aggiungeranno come sorgenti.
 
 ## Concetti collegati
 
@@ -100,3 +111,4 @@ Gli altri tre cancelli restano aperti, e con loro gli ADR-007, 011, 012 e 013. L
 - [Sviluppo e operatività](/operations/development.md) — build, test, distribuzione previsti
 - [PRD di iMAGE Surfer](/references/prd.md) — la fonte dell'intento
 - [Ammissione del lavoro con stime calibrate e banda di ritenzione](/decisions/work-admission-budget.md) — la decisione chiusa dal cancello n°1
+- [Lotti di operazioni su file recuperabili con esiti dichiarati](/decisions/recoverable-file-batches.md) — la decisione chiusa dal cancello n°4
